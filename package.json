@@ -1,6 +1,6 @@
 {
   "name": "js-defuser",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Sound, fully automatic JavaScript deobfuscator: recovers js-confuser (every transform at max settings, locks included) and javascript-obfuscator output back to readable source without executing it. Runs on Node and, via js-defuser/browser, in the browser.",
   "license": "MIT",
   "author": "Arsylk",

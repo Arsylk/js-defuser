@@ -12150,6 +12150,24 @@ const PASS_ORDER = [
 // Orchestrator
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Let the host's message loop turn between passes: a streamed log line
+ * reaches its listener, a Web Worker answers its port, a test runner hears
+ * from its worker — none of which can happen while a pass is running. A
+ * macrotask, not a microtask, and never a clamped timer.
+ */
+const yieldChannel = typeof MessageChannel !== 'undefined' ? new MessageChannel() : null;
+function yieldToEventLoop(): Promise<void> {
+  if (typeof setImmediate === 'function') return new Promise((resolve) => setImmediate(resolve));
+  if (yieldChannel)
+    return new Promise((resolve) => {
+      // (browsers only — Node has setImmediate — hence the cast past Node's types)
+      (yieldChannel.port1 as unknown as { onmessage: (() => void) | null }).onmessage = () => resolve();
+      yieldChannel.port2.postMessage(null);
+    });
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 export async function deobfuscate(
   code: string,
   options: DeobfuscationOptions
@@ -12361,6 +12379,7 @@ export async function deobfuscate(
         log.fail(null, passName, m);
         errors.push(`${passName}: ${m}`);
       }
+      await yieldToEventLoop();
     }
     try {
       traverse.cache.clear();

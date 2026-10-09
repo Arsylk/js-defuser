@@ -121,6 +121,7 @@ describe('engine on quickjs', () => {
   for (const [name, code] of samples) {
     it(`recovers ${name} identically`, async () => {
       const expected = await recoverWith(node, code);
+      await new Promise((r) => setImmediate(r)); // let the worker answer vitest between two long runs
       const got = await recoverWith(quickjs, code);
       expect(got).toBe(expected);
       const source = readFileSync(new URL(name.split('/')[1], fixtures), 'utf8');
