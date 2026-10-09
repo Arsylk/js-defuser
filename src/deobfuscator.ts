@@ -163,7 +163,7 @@ import { applyJsNice, type JsNiceOptions } from './jsnice.js';
 import { ownContextSensitive, passCffRecover } from './cff.js';
 import { createSandbox } from './sandbox.js';
 import { base64ToBytes, bytesToBase64, bufferToString, latin1Decode, latin1Encode, utf8Decode, utf8Encode, type Encoding } from './base64.js';
-import { createLogger, type Entry, type Logger } from './logger.js';
+import { createLogger, kebab, type Entry, type Logger } from './logger.js';
 
 export type { JsNiceOptions } from './jsnice.js';
 
@@ -221,65 +221,65 @@ export interface DeobfuscationResult {
  * of this list because they can make valid, non-obfuscated programs less clear.
  */
 export const DEFAULT_ENABLED_PASSES = [
-  'functionConstructor', // B03c
-  'evalLiteral', // B03d
+  'function-constructor', // B03c
+  'eval-literal', // B03d
   'rgf', // B03e
-  'rgfThunk', // B03f
-  'cffRecover', // B13d
-  'stringEscapeNorm',
-  'hexStringDecoding',
-  'globalObjectAlias',
-  'nativeAlias',
-  'pureNativeCalls',
-  'pureNumericFns',
-  'fromCharCode',
-  'atobDecoding',
-  'bufferDecoding',
-  'constantFolding',
-  'stringDecoding',
-  'poolDecoding',
-  'concealedStrings', // B05d — js-confuser string pool, per-block decoders
-  'statementNormalize', // B00b — hoist sequences / fold `x = {}; x.k = v`
+  'rgf-thunk', // B03f
+  'cff-recover', // B13d
+  'string-escape-norm',
+  'hex-string-decoding',
+  'global-object-alias',
+  'native-alias',
+  'pure-native-calls',
+  'pure-numeric-fns',
+  'from-char-code',
+  'atob-decoding',
+  'buffer-decoding',
+  'constant-folding',
+  'string-decoding',
+  'pool-decoding',
+  'concealed-strings', // B05d — js-confuser string pool, per-block decoders
+  'statement-normalize', // B00b — hoist sequences / fold `x = {}; x.k = v`
   'dispatchers', // B09d — js-confuser dispatcher tables → declarations and plain calls
-  'flatFunctions', // B09c — flattened function bodies back into their wrappers
-  'maskedVariables', // B00d — rest-parameter slots → parameters and locals
-  'movedDeclarations', // B00e — never-supplied params holding moved declarations
-  'paramLocals', // B00c — overwritten-before-read params → var
-  'concealedGlobals', // B01e — js-confuser global probe and switch table
+  'flat-functions', // B09c — flattened function bodies back into their wrappers
+  'masked-variables', // B00d — rest-parameter slots → parameters and locals
+  'moved-declarations', // B00e — never-supplied params holding moved declarations
+  'param-locals', // B00c — overwritten-before-read params → var
+  'concealed-globals', // B01e — js-confuser global probe and switch table
   'locks', // B20
-  'noopCalls', // B09b — statement-level calls of do-nothing functions → their arguments
-  'bindingPropagation', // B08b — write-once aliases & literals
-  'objectTables', // B07c — frozen index / proxy-function tables
-  'literalArrays', // B07d — frozen literal index tables
-  'closedFunctionEval', // B05c — VM-fold self-contained decoder groups
-  'bitwiseLiterals', // B04b — fractional bitwise operands
-  'memberExpressionSimplification',
-  'dispatchTableInlining',
-  'identityTable',
-  'constantPropagation',
-  'proxyFunctionRemoval',
-  'functionInlining',
-  'opaquePredicateRemoval',
-  'scopedConstFold', // B11b — inline single-assignment loop locals into predicates
-  'constantFolding', // fold the predicates B11b just made literal
-  'deadCodeElimination',
-  'controlFlowFlattening',
-  'switchDispatcher', // B13c — split-order dispatchers in for/while form
-  'stateMachineUnflatten', // B13b — for(;;){switch(state)} → straight-line code
-  'selfDefending',
-  'commaSequence',
-  'conditionalStatements', // B15b — statement-level ?: / && / || → if
-  'typeofSimplify',
-  'booleanSimplify', // B16b — cond ? true : false → !!cond
-  'unusedVars',
-  'deadFunctions', // B17b — drop helpers whose call sites were all inlined
-  'deadStores', // B17c — writes to bindings nothing reads
-  'singleUseTemps', // B17d — `x = E; return x;` → `return E;`
-  'iifeFlatten', // B17e
-  'declarationTidy', // B17f
-  'deduplicateVarDecls',
-  'confuserNames', // B19b
-  'vmEvalHook',
+  'noop-calls', // B09b — statement-level calls of do-nothing functions → their arguments
+  'binding-propagation', // B08b — write-once aliases & literals
+  'object-tables', // B07c — frozen index / proxy-function tables
+  'literal-arrays', // B07d — frozen literal index tables
+  'closed-function-eval', // B05c — VM-fold self-contained decoder groups
+  'bitwise-literals', // B04b — fractional bitwise operands
+  'member-expression-simplification',
+  'dispatch-table-inlining',
+  'identity-table',
+  'constant-propagation',
+  'proxy-function-removal',
+  'function-inlining',
+  'opaque-predicate-removal',
+  'scoped-const-fold', // B11b — inline single-assignment loop locals into predicates
+  'constant-folding', // fold the predicates B11b just made literal
+  'dead-code-elimination',
+  'control-flow-flattening',
+  'switch-dispatcher', // B13c — split-order dispatchers in for/while form
+  'state-machine-unflatten', // B13b — for(;;){switch(state)} → straight-line code
+  'self-defending',
+  'comma-sequence',
+  'conditional-statements', // B15b — statement-level ?: / && / || → if
+  'typeof-simplify',
+  'boolean-simplify', // B16b — cond ? true : false → !!cond
+  'unused-vars',
+  'dead-functions', // B17b — drop helpers whose call sites were all inlined
+  'dead-stores', // B17c — writes to bindings nothing reads
+  'single-use-temps', // B17d — `x = E; return x;` → `return E;`
+  'iife-flatten', // B17e
+  'declaration-tidy', // B17f
+  'deduplicate-var-decls',
+  'confuser-names', // B19b
+  'vm-eval-hook',
 ] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1193,7 +1193,7 @@ function passNativeAlias(ast: t.File, log: Logger): number {
   });
 
   if (aliases.size === 0) {
-    log.pass('b01b', 'nativeAlias', 0);
+    log.pass('b01b', 'native-alias', 0);
     return 0;
   }
 
@@ -1235,7 +1235,7 @@ function passNativeAlias(ast: t.File, log: Logger): number {
     }
   }
 
-  log.pass('b01b', 'nativeAlias', n, 'refs', `${inlined.size} aliases removed`);
+  log.pass('b01b', 'native-alias', n, 'refs', `${inlined.size} aliases removed`);
   return n;
 }
 
@@ -1426,7 +1426,7 @@ function passPureNumericFns(ast: t.File, log: Logger): number {
   });
 
   if (pureFns.size === 0) {
-    log.pass('b01c', 'pureNumericFns', 0);
+    log.pass('b01c', 'pure-numeric-fns', 0);
     return 0;
   }
 
@@ -1477,7 +1477,7 @@ function passPureNumericFns(ast: t.File, log: Logger): number {
     },
   });
 
-  log.pass('b01c', 'pureNumericFns', n, 'calls inlined', `${pureFns.size} fns detected`);
+  log.pass('b01c', 'pure-numeric-fns', n, 'calls inlined', `${pureFns.size} fns detected`);
   return n;
 }
 
@@ -2078,7 +2078,7 @@ function passEvalLiteral(ast: t.File, log: Logger): number {
   });
   log.pass(
     'b03d',
-    'evalLiteral',
+    'eval-literal',
     n,
     'inlined',
     notExpression > 0 ? `${notExpression} not a lone expression` : undefined
@@ -2420,7 +2420,7 @@ function passRgfThunk(ast: t.File, log: Logger): number {
     },
   });
   if (boxes.size === 0) {
-    log.pass('b03f', 'rgfThunk', 0, 'thunks', 'no embedding box');
+    log.pass('b03f', 'rgf-thunk', 0, 'thunks', 'no embedding box');
     return 0;
   }
 
@@ -2466,7 +2466,7 @@ function passRgfThunk(ast: t.File, log: Logger): number {
     }
   }
 
-  log.pass('b03f', 'rgfThunk', n, 'thunks', removed > 0 ? `${removed} boxes removed` : undefined);
+  log.pass('b03f', 'rgf-thunk', n, 'thunks', removed > 0 ? `${removed} boxes removed` : undefined);
   return n + removed;
 }
 
@@ -2672,7 +2672,7 @@ function passPureNativeCalls(ast: t.File, log: Logger): number {
       },
     },
   });
-  log.pass('b10b', 'pureNativeCalls', n);
+  log.pass('b10b', 'pure-native-calls', n);
   return n;
 }
 
@@ -2682,10 +2682,10 @@ function passFromCharCode(ast: t.File, log: Logger): number {
     CallExpression(p) {
       const callee = p.node.callee;
       const ok =
-        t.isIdentifier(callee, { name: 'fromCharCode' }) ||
+        t.isIdentifier(callee, { name: 'from-char-code' }) ||
         (t.isMemberExpression(callee) &&
           t.isIdentifier(callee.object, { name: 'String' }) &&
-          t.isIdentifier(callee.property, { name: 'fromCharCode' }));
+          t.isIdentifier(callee.property, { name: 'from-char-code' }));
       if (!ok) return;
       const codes = p.node.arguments.map((a) => (t.isNumericLiteral(a) ? a.value : null));
       if (!codes.length || codes.some((c) => c === null)) return;
@@ -2697,7 +2697,7 @@ function passFromCharCode(ast: t.File, log: Logger): number {
       }
     },
   });
-  log.pass('b02', 'fromCharCode', n);
+  log.pass('b02', 'from-char-code', n);
   return n;
 }
 
@@ -2997,7 +2997,7 @@ function passConstantFolding(ast: t.File, log: Logger): number {
     total += ch;
     if (ch === 0) break;
   }
-  log.pass('b04', 'constantFolding', total);
+  log.pass('b04', 'constant-folding', total);
   return total;
 }
 
@@ -4133,7 +4133,7 @@ function passIdentityTable(ast: t.File, log: Logger): number {
   });
 
   if (tables.size === 0) {
-    log.pass('b07b', 'identityTable', 0);
+    log.pass('b07b', 'identity-table', 0);
     return 0;
   }
 
@@ -4176,7 +4176,7 @@ function passIdentityTable(ast: t.File, log: Logger): number {
   }
 
   // The table is dead once every reference is gone; B17b will collect it.
-  log.pass('b07b', 'identityTable', n, 'refs', `${tables.size} tables`);
+  log.pass('b07b', 'identity-table', n, 'refs', `${tables.size} tables`);
   return n;
 }
 
@@ -4730,7 +4730,7 @@ function passMovedDeclarations(ast: t.File, log: Logger): number {
       /**/
     }
   }
-  log.pass('b00e', 'movedDeclarations', moved, 'declarations', `${fns} functions`);
+  log.pass('b00e', 'moved-declarations', moved, 'declarations', `${fns} functions`);
   return moved;
 }
 
@@ -5009,7 +5009,7 @@ function passConcealedGlobals(ast: t.File, log: Logger): number {
     };
     after.traverse({ FunctionDeclaration: drop, FunctionExpression: drop });
   }
-  log.pass('b01e', 'concealedGlobals', probes + lookups + removed, 'rewrites', `${probes} probes · ${lookups} lookups · ${removed} removed`);
+  log.pass('b01e', 'concealed-globals', probes + lookups + removed, 'rewrites', `${probes} probes · ${lookups} lookups · ${removed} removed`);
   return probes + lookups + removed;
 }
 
@@ -5415,7 +5415,7 @@ function passConcealedStrings(ast: t.File, log: Logger, strict = false): number 
     retrievers.push({ binding: def.binding, def, decoder: def.binding, pool: null, poolValue: null, general: true });
   }
   if (retrievers.length === 0) {
-    log.pass('b05d', 'concealedStrings', 0, undefined, 'no retrievers');
+    log.pass('b05d', 'concealed-strings', 0, undefined, 'no retrievers');
     return 0;
   }
 
@@ -5513,7 +5513,7 @@ function passConcealedStrings(ast: t.File, log: Logger, strict = false): number 
     if (!readsPool) retrievers.splice(i, 1);
   }
   if (retrievers.length === 0) {
-    log.pass('b05d', 'concealedStrings', 0, undefined, 'no retrievers');
+    log.pass('b05d', 'concealed-strings', 0, undefined, 'no retrievers');
     return 0;
   }
 
@@ -5766,7 +5766,7 @@ function passConcealedStrings(ast: t.File, log: Logger, strict = false): number 
     }
   }
 
-  log.pass('b05d', 'concealedStrings', folded, 'strings', `${evaluated} retrievers probed · ${removed} declarations removed`);
+  log.pass('b05d', 'concealed-strings', folded, 'strings', `${evaluated} retrievers probed · ${removed} declarations removed`);
   return folded + removed;
 }
 
@@ -6661,7 +6661,7 @@ function passFlatFunctions(ast: t.File, log: Logger): number {
     }
   }
 
-  log.pass('b09c', 'flatFunctions', inlined + accessors, 'rewrites', `${inlined} bodies moved back`);
+  log.pass('b09c', 'flat-functions', inlined + accessors, 'rewrites', `${inlined} bodies moved back`);
   return inlined + accessors;
 }
 
@@ -6943,7 +6943,7 @@ function passMaskedVariables(ast: t.File, log: Logger): number {
       /**/
     }
   }
-  log.pass('b00d', 'maskedVariables', slots, 'slots', `${fns} functions`);
+  log.pass('b00d', 'masked-variables', slots, 'slots', `${fns} functions`);
   return slots;
 }
 
@@ -7032,7 +7032,7 @@ function passNoopCalls(ast: t.File, log: Logger): number {
       /**/
     }
   }
-  log.pass('b09b', 'noopCalls', n, 'calls', `${fns} functions`);
+  log.pass('b09b', 'noop-calls', n, 'calls', `${fns} functions`);
   return n;
 }
 
@@ -7232,7 +7232,7 @@ function passScopedConstFold(ast: t.File, log: Logger): number {
     },
   });
 
-  log.pass('b11b', 'scopedConstFold', n);
+  log.pass('b11b', 'scoped-const-fold', n);
   return n;
 }
 
@@ -8199,7 +8199,7 @@ function passSelfDefending(ast: t.File, log: Logger): number {
     },
   });
   n += removeCallControllerWrappers(ast);
-  log.pass('b14', 'selfDefending', n);
+  log.pass('b14', 'self-defending', n);
   return n;
 }
 
@@ -8562,7 +8562,7 @@ function passDeadFunctions(ast: t.File, log: Logger): number {
     if (roundRemoved === 0) break;
   }
 
-  log.pass('b17b', 'deadFunctions', removed);
+  log.pass('b17b', 'dead-functions', removed);
   return removed;
 }
 
@@ -8623,7 +8623,7 @@ function passBooleanSimplify(ast: t.File, log: Logger): number {
       },
     },
   });
-  log.pass('b16b', 'booleanSimplify', n);
+  log.pass('b16b', 'boolean-simplify', n);
   return n;
 }
 
@@ -8687,7 +8687,7 @@ function passUnusedVars(ast: t.File, log: Logger): number {
       }
     },
   });
-  log.pass('b17', 'unusedVars', n);
+  log.pass('b17', 'unused-vars', n);
   return n;
 }
 
@@ -9318,7 +9318,7 @@ function passStatementNormalize(ast: t.File, log: Logger): number {
     n += changed;
     if (changed === 0) break;
   }
-  log.pass('b00b', 'statementNormalize', n);
+  log.pass('b00b', 'statement-normalize', n);
   return n;
 }
 
@@ -9562,7 +9562,7 @@ function passParamLocals(ast: t.File, log: Logger): number {
   }
   log.pass(
     'b00c',
-    'paramLocals',
+    'param-locals',
     n,
     'params demoted',
     `${jobs.length} fns${underEval > 0 ? `, ${underEval} under eval` : ''}`
@@ -9711,7 +9711,7 @@ function passBindingPropagation(ast: t.File, log: Logger): number {
 
   log.pass(
     'b08b',
-    'bindingPropagation',
+    'binding-propagation',
     aliases + literals + unset,
     'refs',
     `${aliases} alias, ${literals} literal, ${facts.size} write-once bindings` +
@@ -9856,7 +9856,7 @@ function passLiteralArrays(ast: t.File, log: Logger): number {
       /* detached by an earlier fold */
     }
   }
-  log.pass('b07d', 'literalArrays', n, 'reads folded', `${tables} tables`);
+  log.pass('b07d', 'literal-arrays', n, 'reads folded', `${tables} tables`);
   return n;
 }
 
@@ -9983,7 +9983,7 @@ function passObjectTables(ast: t.File, log: Logger): number {
       /* stale path after an enclosing rewrite — next sweep */
     }
   }
-  log.pass('b07c', 'objectTables', n, 'sites', `${tables} frozen tables`);
+  log.pass('b07c', 'object-tables', n, 'sites', `${tables} frozen tables`);
   return n;
 }
 
@@ -10332,7 +10332,7 @@ function passDeadStores(ast: t.File, log: Logger): number {
     total += n;
     if (n === 0) break;
   }
-  log.pass('b17c', 'deadStores', total);
+  log.pass('b17c', 'dead-stores', total);
   return total;
 }
 
@@ -10483,7 +10483,7 @@ function passSingleUseTemps(ast: t.File, log: Logger): number {
     total += n;
     if (n === 0) break;
   }
-  log.pass('b17d', 'singleUseTemps', total);
+  log.pass('b17d', 'single-use-temps', total);
   return total;
 }
 
@@ -10617,7 +10617,7 @@ function passClosedFunctionEval(ast: t.File, log: Logger): number {
   }
   const closedFns = [...closed].filter((b) => members.get(b)!.kind === 'fn');
   if (closedFns.length === 0) {
-    log.pass('b05c', 'closedFunctionEval', 0, undefined, 'no closed functions');
+    log.pass('b05c', 'closed-function-eval', 0, undefined, 'no closed functions');
     return 0;
   }
 
@@ -11026,7 +11026,7 @@ function passClosedFunctionEval(ast: t.File, log: Logger): number {
 
   log.pass(
     'b05c',
-    'closedFunctionEval',
+    'closed-function-eval',
     folded,
     'calls folded',
     `${closedFns.length} closed fns, ${evaluated} slices evaluated, ${removedGroups} removed`
@@ -11196,7 +11196,7 @@ function passIifeFlatten(ast: t.File, log: Logger): number {
     },
   });
   n += params;
-  log.pass('b17e', 'iifeFlatten', n);
+  log.pass('b17e', 'iife-flatten', n);
   return n;
 }
 
@@ -11245,7 +11245,7 @@ function passConfuserNames(ast: t.File, log: Logger): number {
       visit(p.scope);
     },
   });
-  log.pass('b19b', 'confuserNames', n, 'renamed');
+  log.pass('b19b', 'confuser-names', n, 'renamed');
   return n;
 }
 
@@ -11423,7 +11423,7 @@ function passDeclarationTidy(ast: t.File, log: Logger): number {
   const total = dropped + sunk + declared;
   log.pass(
     'b17f',
-    'declarationTidy',
+    'declaration-tidy',
     total,
     'statements',
     total ? `${dropped} redundant, ${sunk} declarations sunk, ${declared} functions declared` : undefined
@@ -11473,7 +11473,7 @@ function passBitwiseLiterals(ast: t.File, log: Logger): number {
       }
     },
   });
-  log.pass('b04b', 'bitwiseLiterals', n);
+  log.pass('b04b', 'bitwise-literals', n);
   return n;
 }
 
@@ -11745,7 +11745,7 @@ function passSwitchDispatcher(ast: t.File, log: Logger): number {
       /**/
     }
   }
-  log.pass('b13c', 'switchDispatcher', n);
+  log.pass('b13c', 'switch-dispatcher', n);
   return n;
 }
 
@@ -11806,7 +11806,7 @@ function passConditionalStatements(ast: t.File, log: Logger): number {
       }
     },
   });
-  log.pass('b15b', 'conditionalStatements', n);
+  log.pass('b15b', 'conditional-statements', n);
   return n;
 }
 
@@ -11828,13 +11828,13 @@ const VM_EVAL_TRIGGER = /\b(?:eval|Function|setTimeout|setInterval|atob|unescape
 function vmEvalHook(code: string, log: Logger): string | null {
   // No dynamic-eval construct anywhere → nothing for this stage to capture.
   if (!VM_EVAL_TRIGGER.test(code)) {
-    log.skip(null, 'vmEvalHook', 'no dynamic eval constructs');
+    log.skip(null, 'vm-eval-hook', 'no dynamic eval constructs');
     return null;
   }
   if (code.length > VM_EVAL_MAX_BYTES) {
     log.skip(
       null,
-      'vmEvalHook',
+      'vm-eval-hook',
       `${code.length} bytes > ${VM_EVAL_MAX_BYTES} limit, executing a payload this large risks stalling the run`
     );
     return null;
@@ -11987,18 +11987,18 @@ function vmEvalHook(code: string, log: Logger): string | null {
     }
 
     if (captured.length > 0) {
-      log.pass(null, 'vmEvalHook', captured.length, 'eval() payload(s) captured');
+      log.pass(null, 'vm-eval-hook', captured.length, 'eval() payload(s) captured');
       return captured.reduce((a, b) => (a.length >= b.length ? a : b));
     }
     if (artifacts.length > 0) {
-      log.pass(null, 'vmEvalHook', artifacts.length, 'wsh/browser artifact string(s) captured');
+      log.pass(null, 'vm-eval-hook', artifacts.length, 'wsh/browser artifact string(s) captured');
       return artifacts.join('\n');
     }
-    log.pass(null, 'vmEvalHook', 0, 'payloads captured', 'sandbox ran clean');
+    log.pass(null, 'vm-eval-hook', 0, 'payloads captured', 'sandbox ran clean');
   } catch (e) {
     log.fail(
       null,
-      'vmEvalHook',
+      'vm-eval-hook',
       `sandbox exec failed: ${(e instanceof Error ? e.message : String(e)).slice(0, 120)}`
     );
   }
@@ -12012,138 +12012,138 @@ function vmEvalHook(code: string, log: Logger): string | null {
 type PassFn = (ast: t.File, log: Logger) => number;
 
 const PASS_FN_MAP: Record<string, PassFn> = {
-  stringEscapeNorm: passStringEscapeNorm,
-  functionConstructor: passFunctionConstructor, // B03c — Function("…","body") → IIFE
-  evalLiteral: passEvalLiteral, // B03d
-  rgf: passRgf, // B03e — reduced-global-function (eval-embedded functions)
-  rgfThunk: passRgfThunk, // B03f — collapse RGF forwarding thunks into their real fn
-  cffRecover: passCffRecover, // B13d — js-confuser control-flow flattening (see ./cff) — eval("<expr>") → <expr>
-  hexStringDecoding: passLiteralNormalise,
-  nativeAlias: passNativeAlias,
-  globalObjectAlias: passGlobalObjectAlias,
-  pureNativeCalls: passPureNativeCalls,
-  pureNumericFns: passPureNumericFns,
-  fromCharCode: passFromCharCode,
-  atobDecoding: passAtob,
-  bufferDecoding: passBufferDecoding,
-  constantFolding: passConstantFolding,
-  closureStringDecoding: passClosureStringDecoder, // B05a — closure/factory pattern
-  stringDecoding: passStringDecoder,
-  poolDecoding: passPoolDecoder,
-  memberExpressionSimplification: passMemberSimplify,
-  dispatchTableInlining: passDispatchTable,
-  identityTable: passIdentityTable,
-  constantPropagation: passConstantPropagation,
-  proxyFunctionRemoval: passProxyFunctions,
-  noopCalls: passNoopCalls, // B09b — `F(a, b);` of a do-nothing F → `a; b;`
-  movedDeclarations: passMovedDeclarations, // B00e — `if (!p) p = function…` params → declarations
-  concealedGlobals: passConcealedGlobals, // B01e — js-confuser global probe + switch table
-  concealedStrings: passConcealedStrings, // B05d — js-confuser string pool + decoder
-  dispatchers: passDispatchers, // B09d — dispatcher tables back to declarations and calls
-  flatFunctions: passFlatFunctions, // B09c — flattened bodies back into their wrappers
-  maskedVariables: passMaskedVariables, // B00d — rest-parameter slots → params and locals
-  functionInlining: passPureNativeCalls, // superseded passNumericCoercions (B10b covers B10)
-  opaquePredicateRemoval: passOpaquePredicates,
-  scopedConstFold: passScopedConstFold,
-  deadCodeElimination: passDeadCode,
-  controlFlowFlattening: passControlFlowUnflatten,
-  stateMachineUnflatten: passStateMachineUnflatten,
-  selfDefending: passSelfDefending,
-  commaSequence: passCommaSequence,
-  typeofSimplify: passTypeofSimplify,
-  unusedVars: passUnusedVars,
-  deadFunctions: passDeadFunctions,
-  booleanSimplify: passBooleanSimplify,
-  deduplicateVarDecls: passDeduplicateVarDecls,
-  renameMangled: passRenameMangled,
-  statementNormalize: passStatementNormalize,
-  paramLocals: passParamLocals,
-  bindingPropagation: passBindingPropagation,
-  objectTables: passObjectTables,
-  literalArrays: passLiteralArrays, // B07d — frozen literal index tables
-  closedFunctionEval: passClosedFunctionEval,
-  bitwiseLiterals: passBitwiseLiterals,
-  switchDispatcher: passSwitchDispatcher,
-  conditionalStatements: passConditionalStatements,
-  deadStores: passDeadStores,
-  singleUseTemps: passSingleUseTemps,
-  iifeFlatten: passIifeFlatten, // B17e — argument-less IIFE statements inside functions
-  declarationTidy: passDeclarationTidy, // B17f — `var x; x = 1;` → `var x = 1;`
-  confuserNames: passConfuserNames, // B19b — `__p_XXXX_meaning` → `meaning`
-  locks: passLocks, // B20 — js-confuser's self-text checks, resolved from the original text
+  'string-escape-norm': passStringEscapeNorm,
+  'function-constructor': passFunctionConstructor, // B03c — Function("…","body") → IIFE
+  'eval-literal': passEvalLiteral, // B03d
+  'rgf': passRgf, // B03e — reduced-global-function (eval-embedded functions)
+  'rgf-thunk': passRgfThunk, // B03f — collapse RGF forwarding thunks into their real fn
+  'cff-recover': passCffRecover, // B13d — js-confuser control-flow flattening (see ./cff) — eval("<expr>") → <expr>
+  'hex-string-decoding': passLiteralNormalise,
+  'native-alias': passNativeAlias,
+  'global-object-alias': passGlobalObjectAlias,
+  'pure-native-calls': passPureNativeCalls,
+  'pure-numeric-fns': passPureNumericFns,
+  'from-char-code': passFromCharCode,
+  'atob-decoding': passAtob,
+  'buffer-decoding': passBufferDecoding,
+  'constant-folding': passConstantFolding,
+  'closure-string-decoding': passClosureStringDecoder, // B05a — closure/factory pattern
+  'string-decoding': passStringDecoder,
+  'pool-decoding': passPoolDecoder,
+  'member-expression-simplification': passMemberSimplify,
+  'dispatch-table-inlining': passDispatchTable,
+  'identity-table': passIdentityTable,
+  'constant-propagation': passConstantPropagation,
+  'proxy-function-removal': passProxyFunctions,
+  'noop-calls': passNoopCalls, // B09b — `F(a, b);` of a do-nothing F → `a; b;`
+  'moved-declarations': passMovedDeclarations, // B00e — `if (!p) p = function…` params → declarations
+  'concealed-globals': passConcealedGlobals, // B01e — js-confuser global probe + switch table
+  'concealed-strings': passConcealedStrings, // B05d — js-confuser string pool + decoder
+  'dispatchers': passDispatchers, // B09d — dispatcher tables back to declarations and calls
+  'flat-functions': passFlatFunctions, // B09c — flattened bodies back into their wrappers
+  'masked-variables': passMaskedVariables, // B00d — rest-parameter slots → params and locals
+  'function-inlining': passPureNativeCalls, // superseded passNumericCoercions (B10b covers B10)
+  'opaque-predicate-removal': passOpaquePredicates,
+  'scoped-const-fold': passScopedConstFold,
+  'dead-code-elimination': passDeadCode,
+  'control-flow-flattening': passControlFlowUnflatten,
+  'state-machine-unflatten': passStateMachineUnflatten,
+  'self-defending': passSelfDefending,
+  'comma-sequence': passCommaSequence,
+  'typeof-simplify': passTypeofSimplify,
+  'unused-vars': passUnusedVars,
+  'dead-functions': passDeadFunctions,
+  'boolean-simplify': passBooleanSimplify,
+  'deduplicate-var-decls': passDeduplicateVarDecls,
+  'rename-mangled': passRenameMangled,
+  'statement-normalize': passStatementNormalize,
+  'param-locals': passParamLocals,
+  'binding-propagation': passBindingPropagation,
+  'object-tables': passObjectTables,
+  'literal-arrays': passLiteralArrays, // B07d — frozen literal index tables
+  'closed-function-eval': passClosedFunctionEval,
+  'bitwise-literals': passBitwiseLiterals,
+  'switch-dispatcher': passSwitchDispatcher,
+  'conditional-statements': passConditionalStatements,
+  'dead-stores': passDeadStores,
+  'single-use-temps': passSingleUseTemps,
+  'iife-flatten': passIifeFlatten, // B17e — argument-less IIFE statements inside functions
+  'declaration-tidy': passDeclarationTidy, // B17f — `var x; x = 1;` → `var x = 1;`
+  'confuser-names': passConfuserNames, // B19b — `__p_XXXX_meaning` → `meaning`
+  'locks': passLocks, // B20 — js-confuser's self-text checks, resolved from the original text
 };
 
-const PASS_ORDER = [
-  'functionConstructor', // B03c — expose a program hidden in a Function() string
-  'evalLiteral', // B03d — drop literal direct eval so binding passes stay enabled
+export const PASS_ORDER: readonly string[] = [
+  'function-constructor', // B03c — expose a program hidden in a Function() string
+  'eval-literal', // B03d — drop literal direct eval so binding passes stay enabled
   'rgf', // B03e — recover functions embedded as eval source behind a guard
-  'rgfThunk', // B03f — collapse the forwarding thunks RGF leaves behind
-  'cffRecover', // B13d — simulate js-confuser dispatchers, rebuild if/while, lower scope frames
-  'stringEscapeNorm',
-  'hexStringDecoding',
+  'rgf-thunk', // B03f — collapse the forwarding thunks RGF leaves behind
+  'cff-recover', // B13d — simulate js-confuser dispatchers, rebuild if/while, lower scope frames
+  'string-escape-norm',
+  'hex-string-decoding',
   'dispatchers', // B09d — before B00b splits `(PAYLOAD = […], D("k"))` into statements
-  'statementNormalize', // B00b — sequences out of statement heads, literal assembly
-  'flatFunctions', // B09c — `return F(o, args)` wrappers get their bodies back
-  'maskedVariables', // B00d — `S[0]`, `S[-3]`, `S.k` slots of a rest param → names
-  'movedDeclarations', // B00e — surplus params guarded with `if (!p) p = function…` → declarations
-  'paramLocals', // B00c — overwritten-before-read params → var (needs B00b's statements)
-  'noopCalls', // B09b — unpack the AST scrambler's `F(a, b, c);` into statements
-  'concealedGlobals', // B01e — js-confuser's global probe → globalThis, table lookups → reads
+  'statement-normalize', // B00b — sequences out of statement heads, literal assembly
+  'flat-functions', // B09c — `return F(o, args)` wrappers get their bodies back
+  'masked-variables', // B00d — `S[0]`, `S[-3]`, `S.k` slots of a rest param → names
+  'moved-declarations', // B00e — surplus params guarded with `if (!p) p = function…` → declarations
+  'param-locals', // B00c — overwritten-before-read params → var (needs B00b's statements)
+  'noop-calls', // B09b — unpack the AST scrambler's `F(a, b, c);` into statements
+  'concealed-globals', // B01e — js-confuser's global probe → globalThis, table lookups → reads
   'locks', // B20 — integrity lock / anti-beautify test settled from the original source text
-  'globalObjectAlias', // B01d — `var p = window` → drop the p. prefix first
-  'nativeAlias', // B01b — unmask `var s = String.fromCharCode` before B02/B03
-  'pureNumericFns', // B01c — collapse bitwise-identity fns hiding charcodes
-  'fromCharCode',
-  'atobDecoding',
-  'bufferDecoding',
-  'constantFolding', // round 1 — fold hex/octal numerics first
-  'closureStringDecoding', // B05a — run BEFORE constantFolding has destroyed arithmetic
-  'stringDecoding', // B05  — simple top-level array pattern (fallback)
-  'poolDecoding', // B05b — pool + transforming decoder, e.g. atob(pool[i])
-  'concealedStrings', // B05d — js-confuser `STR(start, length)` over one string pool
-  'bindingPropagation', // B08b — write-once aliases (`mW = Q`) and literals → value
-  'objectTables', // B07c — frozen index/proxy tables: `uW.L` → 602, `o.f(a,b)` → a < b
-  'literalArrays', // B07d — `K[13]` → the element, for tables nothing can mutate
-  'deadStores', // B17c — drop the alias stores B08b emptied so B05c sees no leaks
-  'closedFunctionEval', // B05c — VM-fold calls into self-contained decoder groups
-  'pureNumericFns', // B01c again — new literal args exposed by folding
-  'fromCharCode', // B02 again — charcodes unmasked by pureNumericFns
-  'pureNativeCalls', // B10b — Math.floor(135.61) → 135, feeding the predicates
-  'constantFolding', // round 2 — fold after string inlining
-  'bitwiseLiterals', // B04b — `x >>> 6.74` → `x >>> 6`
-  'closureStringDecoding', // B05a again — picks up any proxy-wrapped call sites
-  'evalLiteral', // B03d again — arguments that only became literal after decoding
-  'memberExpressionSimplification',
-  'objectTables', // B07c again — keys are static now that strings are decoded
-  'literalArrays', // B07d again — indices that only became literal after folding
-  'dispatchTableInlining',
-  'identityTable', // B07b — L[a][b] identity constants → integers
-  'constantPropagation', // inline write-once literal vars
-  'pureNativeCalls', // B10b again — args now literal after propagation
-  'constantFolding', // round 3 — fold expressions using inlined constants
-  'pureNumericFns', // B01c — identity fns over now-literal constants
-  'proxyFunctionRemoval',
-  'functionInlining',
-  'opaquePredicateRemoval',
-  'scopedConstFold',
-  'deadCodeElimination',
-  'controlFlowFlattening',
-  'switchDispatcher', // B13c — split-order dispatchers in for/while form
-  'stateMachineUnflatten',
-  'selfDefending',
-  'commaSequence',
-  'conditionalStatements', // B15b — after B13b, which matches the expression form
-  'typeofSimplify',
-  'booleanSimplify', // B16b — cond ? true : false → !!cond
-  'unusedVars',
-  'deadFunctions', // B17b — drop helpers whose call sites were all inlined
-  'deadStores', // B17c — stores/declarations nothing reads any more
-  'singleUseTemps', // B17d — `x = E; return x;` → `return E;`
-  'iifeFlatten', // B17e — `(function(){ … })()` inside a function body → its statements
-  'declarationTidy', // B17f — redundant `x = undefined`, declarations sunk into first assignment
-  'deduplicateVarDecls', // clean up duplicate var names before rename
-  'confuserNames', // B19b — strip js-confuser's generated-name prefix once the transform is undone
-  'renameMangled', // rename last — after all structural passes
+  'global-object-alias', // B01d — `var p = window` → drop the p. prefix first
+  'native-alias', // B01b — unmask `var s = String.fromCharCode` before B02/B03
+  'pure-numeric-fns', // B01c — collapse bitwise-identity fns hiding charcodes
+  'from-char-code',
+  'atob-decoding',
+  'buffer-decoding',
+  'constant-folding', // round 1 — fold hex/octal numerics first
+  'closure-string-decoding', // B05a — run BEFORE constantFolding has destroyed arithmetic
+  'string-decoding', // B05  — simple top-level array pattern (fallback)
+  'pool-decoding', // B05b — pool + transforming decoder, e.g. atob(pool[i])
+  'concealed-strings', // B05d — js-confuser `STR(start, length)` over one string pool
+  'binding-propagation', // B08b — write-once aliases (`mW = Q`) and literals → value
+  'object-tables', // B07c — frozen index/proxy tables: `uW.L` → 602, `o.f(a,b)` → a < b
+  'literal-arrays', // B07d — `K[13]` → the element, for tables nothing can mutate
+  'dead-stores', // B17c — drop the alias stores B08b emptied so B05c sees no leaks
+  'closed-function-eval', // B05c — VM-fold calls into self-contained decoder groups
+  'pure-numeric-fns', // B01c again — new literal args exposed by folding
+  'from-char-code', // B02 again — charcodes unmasked by pureNumericFns
+  'pure-native-calls', // B10b — Math.floor(135.61) → 135, feeding the predicates
+  'constant-folding', // round 2 — fold after string inlining
+  'bitwise-literals', // B04b — `x >>> 6.74` → `x >>> 6`
+  'closure-string-decoding', // B05a again — picks up any proxy-wrapped call sites
+  'eval-literal', // B03d again — arguments that only became literal after decoding
+  'member-expression-simplification',
+  'object-tables', // B07c again — keys are static now that strings are decoded
+  'literal-arrays', // B07d again — indices that only became literal after folding
+  'dispatch-table-inlining',
+  'identity-table', // B07b — L[a][b] identity constants → integers
+  'constant-propagation', // inline write-once literal vars
+  'pure-native-calls', // B10b again — args now literal after propagation
+  'constant-folding', // round 3 — fold expressions using inlined constants
+  'pure-numeric-fns', // B01c — identity fns over now-literal constants
+  'proxy-function-removal',
+  'function-inlining',
+  'opaque-predicate-removal',
+  'scoped-const-fold',
+  'dead-code-elimination',
+  'control-flow-flattening',
+  'switch-dispatcher', // B13c — split-order dispatchers in for/while form
+  'state-machine-unflatten',
+  'self-defending',
+  'comma-sequence',
+  'conditional-statements', // B15b — after B13b, which matches the expression form
+  'typeof-simplify',
+  'boolean-simplify', // B16b — cond ? true : false → !!cond
+  'unused-vars',
+  'dead-functions', // B17b — drop helpers whose call sites were all inlined
+  'dead-stores', // B17c — stores/declarations nothing reads any more
+  'single-use-temps', // B17d — `x = E; return x;` → `return E;`
+  'iife-flatten', // B17e — `(function(){ … })()` inside a function body → its statements
+  'declaration-tidy', // B17f — redundant `x = undefined`, declarations sunk into first assignment
+  'deduplicate-var-decls', // clean up duplicate var names before rename
+  'confuser-names', // B19b — strip js-confuser's generated-name prefix once the transform is undone
+  'rename-mangled', // rename last — after all structural passes
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -12186,17 +12186,17 @@ export async function deobfuscate(
 
   // ── Stage A ───────────────────────────────────────────────────────────────
   log.stage('a · pre-parse');
-  const preEnabled = new Set(options.enabledPasses);
+  const preEnabled = new Set(options.enabledPasses.map(kebab));
 
-  if (preEnabled.has('junkTokenRemoval')) {
+  if (preEnabled.has('junk-token-removal')) {
     const before = currentCode.length;
     currentCode = prePassJunkTokenRemoval(currentCode, log);
-    if (currentCode.length !== before) passesApplied.push('junkTokenRemoval');
+    if (currentCode.length !== before) passesApplied.push('junk-token-removal');
   }
-  if (preEnabled.has('atobDecoding') || preEnabled.has('hexStringDecoding')) {
+  if (preEnabled.has('atob-decoding') || preEnabled.has('hex-string-decoding')) {
     const before = currentCode.length;
     currentCode = prePassBase64(currentCode, log);
-    if (currentCode.length !== before) passesApplied.push('atobDecoding');
+    if (currentCode.length !== before) passesApplied.push('atob-decoding');
   }
 
   // ── Initial parse ─────────────────────────────────────────────────────────
@@ -12263,53 +12263,53 @@ export async function deobfuscate(
   }
 
   // ── Stage B ───────────────────────────────────────────────────────────────
-  const enabled = new Set(options.enabledPasses);
+  const enabled = new Set(options.enabledPasses.map(kebab));
   // Auto-enable companion passes
-  if (enabled.has('stringDecoding')) {
-    enabled.add('closureStringDecoding'); // factory/closure pattern — always companion to B05
-    enabled.add('fromCharCode');
-    enabled.add('atobDecoding');
-    enabled.add('bufferDecoding');
+  if (enabled.has('string-decoding')) {
+    enabled.add('closure-string-decoding'); // factory/closure pattern — always companion to B05
+    enabled.add('from-char-code');
+    enabled.add('atob-decoding');
+    enabled.add('buffer-decoding');
   }
-  if (enabled.has('atobDecoding')) enabled.add('bufferDecoding');
-  if (enabled.has('closureStringDecoding')) {
-    enabled.add('stringDecoding');
+  if (enabled.has('atob-decoding')) enabled.add('buffer-decoding');
+  if (enabled.has('closure-string-decoding')) {
+    enabled.add('string-decoding');
   }
-  if (enabled.has('memberExpressionSimplification')) enabled.add('dispatchTableInlining');
-  if (enabled.has('selfDefending')) enabled.add('commaSequence');
-  if (enabled.has('proxyFunctionRemoval')) enabled.add('constantPropagation');
+  if (enabled.has('member-expression-simplification')) enabled.add('dispatch-table-inlining');
+  if (enabled.has('self-defending')) enabled.add('comma-sequence');
+  if (enabled.has('proxy-function-removal')) enabled.add('constant-propagation');
   // Always-on passes — prerequisites for correct operation
-  enabled.add('stringEscapeNorm');
-  enabled.add('deduplicateVarDecls');
+  enabled.add('string-escape-norm');
+  enabled.add('deduplicate-var-decls');
 
   // Direct eval/with can observe bindings absent from the static reference
   // graph. Preserve their declarations, names, and function call boundaries.
   const evalGated = new Set<string>();
   const bindingPasses = [
-      'statementNormalize',
-      'paramLocals',
-      'globalObjectAlias',
-      'nativeAlias',
+      'statement-normalize',
+      'param-locals',
+      'global-object-alias',
+      'native-alias',
       // Still program-wide in their reasoning: these match shapes or rewrite by
       // name without consulting the scope chain, so one `eval` anywhere can
       // invalidate them. The rest now ask, per binding, whether a direct `eval`
       // is actually in scope, and keep working on the parts of the file it
       // cannot reach — which, in a bundle with one concealed global, is nearly
       // all of it.
-      'pureNumericFns',
-      'closureStringDecoding',
-      'poolDecoding',
-      'dispatchTableInlining',
-      'identityTable',
-      'proxyFunctionRemoval',
-      'scopedConstFold',
-      'controlFlowFlattening',
-      'stateMachineUnflatten',
+      'pure-numeric-fns',
+      'closure-string-decoding',
+      'pool-decoding',
+      'dispatch-table-inlining',
+      'identity-table',
+      'proxy-function-removal',
+      'scoped-const-fold',
+      'control-flow-flattening',
+      'state-machine-unflatten',
       // evaluates helpers and literal pools at deobfuscation time; an eval
       // could rewrite either
-      'cffRecover',
-      'deadFunctions',
-      'renameMangled',
+      'cff-recover',
+      'dead-functions',
+      'rename-mangled',
   ];
   // Passes switched off while an eval/with is present. Checked again before
   // each such pass runs: an eval can appear mid-run (B03c writing out a
@@ -12468,7 +12468,7 @@ export async function deobfuscate(
   }
 
   // ── Stage C ───────────────────────────────────────────────────────────────
-  if (enabled.has('vmEvalHook') || enabled.has('selfDefending')) {
+  if (enabled.has('vm-eval-hook') || enabled.has('self-defending')) {
     log.stage('c · vm eval hook');
     const captured = vmEvalHook(currentCode, log);
     if (captured && captured.trim().length > 50) {
@@ -12481,14 +12481,14 @@ export async function deobfuscate(
         const result = await deobfuscate(captured, {
           ...options,
           enabledPasses: options.enabledPasses.filter(
-            (p) => p !== 'vmEvalHook' && p !== 'selfDefending'
+            (p) => p !== 'vm-eval-hook' && p !== 'self-defending'
           ),
           // The nested run's entries land in our log as they happen, one level
           // deeper and tagged `inner`.
           onLog: (_line, entry) => inner.add(entry),
         });
         currentCode += `\n\n/* === eval() PAYLOAD (recovered) ===\n${result.deobfuscatedCode}\n*/`;
-        passesApplied.push('vmEvalHook');
+        passesApplied.push('vm-eval-hook');
       } catch {
         /**/
       }

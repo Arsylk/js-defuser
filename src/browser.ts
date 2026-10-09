@@ -30,9 +30,9 @@ export async function deobfuscate(code: string, options: DeobfuscationOptions): 
   return runEngine(code, options);
 }
 
-export { DEFAULT_ENABLED_PASSES } from './deobfuscator.js';
+export { DEFAULT_ENABLED_PASSES, PASS_ORDER } from './deobfuscator.js';
 export type { DeobfuscationOptions, DeobfuscationResult, ParseError } from './deobfuscator.js';
-export { BASE_PASSES, PASS_CATALOG, STRUCTURAL_PASSES, withStructuralPasses } from './pass-catalog.js';
-export type { PassInfo } from './pass-catalog.js';
+export { BASE_PASSES, PASS_CATALOG, PIPELINE, STRUCTURAL_PASSES, withStructuralPasses } from './pass-catalog.js';
+export type { PassInfo, PipelineStage, PipelineStep } from './pass-catalog.js';
 export { ansi, createConsoleLogger, createLogger, kebab, mocha, parse, plain, segments, supportsColor, tones } from './logger.js';
 export type { Entry, Logger } from './logger.js';

@@ -7,10 +7,10 @@
  */
 import './sandbox-node.js';
 
-export { deobfuscate, DEFAULT_ENABLED_PASSES } from './deobfuscator.js';
+export { deobfuscate, DEFAULT_ENABLED_PASSES, PASS_ORDER } from './deobfuscator.js';
 export type { DeobfuscationOptions, DeobfuscationResult, ParseError, JsNiceOptions } from './deobfuscator.js';
-export { BASE_PASSES, PASS_CATALOG, STRUCTURAL_PASSES, withStructuralPasses } from './pass-catalog.js';
-export type { PassInfo } from './pass-catalog.js';
+export { BASE_PASSES, PASS_CATALOG, PIPELINE, STRUCTURAL_PASSES, withStructuralPasses } from './pass-catalog.js';
+export type { PassInfo, PipelineStage, PipelineStep } from './pass-catalog.js';
 export { createSandbox, setSandboxFactory, nodeSandboxFactory } from './sandbox.js';
 export type { SandboxContext, SandboxFactory, SandboxGlobals } from './sandbox.js';
 export { applyJsNice } from './jsnice.js';

@@ -2074,7 +2074,7 @@ export function passCffRecover(ast: t.File, log: Logger): number {
     const note = [lowered ? `${lowered} frame refs lowered` : null, flags ? `${flags} return flags collapsed` : null, surplus ? `${surplus} state arguments dropped` : null]
       .filter(Boolean)
       .join(', ');
-    log.pass('b13d', 'cffRecover', 0, 'dispatchers', note || 'none');
+    log.pass('b13d', 'cff-recover', 0, 'dispatchers', note || 'none');
     return lowered + flags + surplus ? 1 : 0;
   }
   const why: string[] = [];
@@ -2088,7 +2088,7 @@ export function passCffRecover(ast: t.File, log: Logger): number {
     pureData = new Set(helpers.data.keys());
     ctx = makeSandbox(helpers);
   } catch (e) {
-    log.skip('b13d', 'cffRecover', `helpers: ${(e instanceof Error ? e.message : String(e)).slice(0, 80)}`);
+    log.skip('b13d', 'cff-recover', `helpers: ${(e instanceof Error ? e.message : String(e)).slice(0, 80)}`);
     return 0;
   }
   // the machinery: closed helpers and pools the dispatcher loops reach
@@ -2157,7 +2157,7 @@ export function passCffRecover(ast: t.File, log: Logger): number {
   const reasons = [...new Set(why)].slice(0, 3).join('; ');
   log.pass(
     'b13d',
-    'cffRecover',
+    'cff-recover',
     expanded.n + nested,
     'dispatchers',
     [lowered ? `${lowered} frame refs lowered` : null, thunks ? `${thunks} call shims removed` : null, reasons ? `kept: ${reasons}` : null]

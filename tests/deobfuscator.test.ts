@@ -736,7 +736,7 @@ describe('structural primitives', () => {
     // assignment itself (not an empty `var ;` with the value lost).
     const source = `function f(a, b) { var r; var q = a; var r = a + b; return r + q; }
       console.log(f(1, 2));`;
-    const result = await recover(source, ['deduplicateVarDecls']);
+    const result = await recover(source, ['deduplicate-var-decls']);
     expect(await execute(result.deobfuscatedCode)).toEqual(['4']);
     expect(result.deobfuscatedCode).toMatch(/r = a \+ b;/);
     expect(result.deobfuscatedCode).not.toMatch(/var ;/);

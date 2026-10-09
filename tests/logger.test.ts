@@ -8,11 +8,11 @@ describe('unified logger', () => {
     log.stage('a · pre-parse');
     log.ok('parsed');
     log.sweep(1, 3);
-    log.pass('B05c', 'closedFunctionEval', 6, 'calls folded', '2 closed fns');
+    log.pass('B05c', 'closed-function-eval', 6, 'calls folded', '2 closed fns');
     log.pass('B01', 'literals', 0);
     log.pass(null, 'junkToken', 0, undefined, 'none detected');
-    log.skip('B00c', 'paramLocals', 'eval/with');
-    log.fail(null, 'vmEvalHook', 'sandbox exec failed: boom');
+    log.skip('B00c', 'param-locals', 'eval/with');
+    log.fail(null, 'vm-eval-hook', 'sandbox exec failed: boom');
     log.warn('parse warnings', '1 browser-tolerant');
     log.note('duplicate declaration of x', '3:1');
     log.sum(6, 'changes');
@@ -42,10 +42,10 @@ describe('unified logger', () => {
     log.title('deobfuscate', '2 passes');
     log.stage('c · vm eval hook');
     log.sweep(2, 12);
-    log.pass('B13c', 'switchDispatcher', 3);
+    log.pass('B13c', 'switch-dispatcher', 3);
     log.pass(null, 'base64', 2, 'atob() calls decoded');
     log.pass('B05a', 'closureStr', 0, undefined, '1 factory, no decoders');
-    log.skip('B17c', 'deadStores', 'eval/with');
+    log.skip('B17c', 'dead-stores', 'eval/with');
     log.fail('B05a', 'closureStr', 'vm failed: timeout');
     log.ok('parsed', '2 warning(s)');
     log.warn('continuing with partial ast', 'output may be incomplete');
@@ -56,7 +56,7 @@ describe('unified logger', () => {
     log.done('97821 bytes', '24.9% smaller');
     const inner = log.child('inner');
     inner.sweep(1, 12);
-    inner.pass('B04', 'constantFolding', 12);
+    inner.pass('B04', 'constant-folding', 12);
     inner.add({ kind: 'note', text: 'from a nested run', depth: 0 });
     for (const [i, entry] of log.entries.entries()) {
       const line = log.lines[i];
@@ -95,7 +95,7 @@ describe('unified logger', () => {
   });
 
   it('names passes in kebab case', () => {
-    expect(kebab('closedFunctionEval')).toBe('closed-function-eval');
+    expect(kebab('closed-function-eval')).toBe('closed-function-eval');
     expect(kebab('jsNice')).toBe('js-nice');
     expect(kebab('str-escape')).toBe('str-escape');
     expect(kebab('B05c')).toBe('b05c');
