@@ -176,6 +176,17 @@ export interface DeobfuscationOptions {
   lenientMode: boolean;
   autoFix: boolean;
   /**
+   * Take the input for the compact program the obfuscator emitted, even when
+   * it arrives pretty-printed (default: true). Obfuscators decide things from
+   * their own text — js-confuser's anti-beautify lock hangs the program when
+   * a function's source gains a newline, and the engine only evaluates a
+   * decoder whose text it can reproduce. Read literally, a formatted copy is
+   * a different, broken program; this option answers those checks for the
+   * compact original instead, and the run logs when it had to. Set it to
+   * false to analyse the text exactly as given.
+   */
+  assumeCompactSource?: boolean;
+  /**
    * Opt-in Stage D: send the locally-deobfuscated code to a JSNice-compatible
    * service for statistical identifier renaming and type inference. This makes a
    * network request to a third party (jsnice.org over plain HTTP by default), so
@@ -372,6 +383,9 @@ const PARSE_STRATEGIES: Array<() => Parameters<typeof parser.parse>[1]> = [
 ];
 
 function safeParse(code: string): ParseResult {
+  // What the parser could not recover from, with where it gave up: the first
+  // strategy is the most permissive, so its error is the one worth showing.
+  let fatal: ParseError | null = null;
   for (const strategy of PARSE_STRATEGIES) {
     try {
       const file = parser.parse(code, strategy());
@@ -381,13 +395,20 @@ function safeParse(code: string): ParseResult {
         rawErrors as Parameters<typeof classifyBabelErrors>[0]
       );
       return { ast: file, warnings, hardErrors };
-    } catch {
-      /* try next */
+    } catch (e) {
+      if (!fatal) {
+        const err = e as { message?: string; loc?: { line: number; column: number } | null };
+        fatal = {
+          message: String(err?.message ?? e).replace(/\s*\(\d+:\d+\)$/, ''),
+          line: err?.loc?.line,
+          col: err?.loc?.column,
+        };
+      }
     }
   }
   try {
     const empty = parser.parse('', { errorRecovery: true });
-    return { ast: empty, warnings: [], hardErrors: [{ message: 'All parse strategies failed.' }] };
+    return { ast: empty, warnings: [], hardErrors: [fatal ?? { message: 'All parse strategies failed.' }] };
   } catch {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return {
@@ -12182,7 +12203,11 @@ export async function deobfuscate(
 
   log.title('deobfuscate', `${options.enabledPasses.length} passes · ${code.length} bytes`);
   // The input text, as functions created from it will print themselves.
-  const runSourceFacts: SourceFacts = { texts: [code], newlineFree: functionsNewlineFree(code) };
+  const assumeCompact = options.assumeCompactSource !== false;
+  const literallyNewlineFree = functionsNewlineFree(code);
+  const runSourceFacts: SourceFacts = { texts: [code], newlineFree: assumeCompact || literallyNewlineFree, assumeCompact };
+  if (assumeCompact && !literallyNewlineFree)
+    log.note('input is pretty-printed', 'treating it as the compact original — self-text checks answer for that form');
 
   // ── Stage A ───────────────────────────────────────────────────────────────
   log.stage('a · pre-parse');
@@ -12349,6 +12374,20 @@ export async function deobfuscate(
       `input is ${currentCode.length} bytes`,
       `limiting to ${maxSweeps} sweeps to bound peak memory`
     );
+  // A program that redeclares a block-scoped name parses (Babel reports it
+  // as a recoverable error) but has no scopes: every traversal would throw
+  // `Duplicate declaration`. Say so once, with the name, instead of failing
+  // each pass in turn.
+  try {
+    freshProgram(ast);
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    if (!/Duplicate declaration/.test(m)) throw e;
+    log.error('no scopes', m);
+    errors.push(`${m.replace(/^.*?(Duplicate declaration)/, '$1')} — the program redeclares a block-scoped name, so no AST pass can run; fix the input and rerun`);
+    success = false;
+    maxSweeps = 0;
+  }
   for (let sweep = 1; sweep <= maxSweeps; sweep++) {
     let total = 0;
     const sizeBefore = currentCode.length;

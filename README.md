@@ -58,6 +58,12 @@ js-defuser [-f input.js] [-o output.js] [--verbose]
 Exit code 1 means the run finished but some pass reported an error (the output is
 still the best sound result); 2 means the input could not be processed at all.
 
+A pretty-printed input is taken for the compact program the obfuscator emitted:
+obfuscators decide things from their own text (js-confuser's anti-beautify lock hangs
+a formatted copy on purpose), so the engine answers those checks for the compact
+original and says so in the log. `--strict-source` (`assumeCompactSource: false`)
+analyses the text exactly as given.
+
 ## Library
 
 ```ts

@@ -19,6 +19,11 @@ Use "-" as either path to explicitly select stdin or stdout.
 Options:
   -v, --verbose        Stream the pass log to stderr as passes run, in colour
                        when stderr is a terminal (NO_COLOR / FORCE_COLOR apply)
+      --strict-source  Analyse the text exactly as given. By default a
+                       pretty-printed input is taken for the compact program
+                       the obfuscator emitted, so its self-text checks
+                       (anti-beautify locks, self-inspecting decoders) answer
+                       as they would for that original.
       --jsnice         Post-process with JSNice (rename identifiers + infer
                        types). Sends the deobfuscated code to a third-party
                        service (jsnice.org over HTTP) — off by default.
@@ -58,6 +63,7 @@ async function main(): Promise<void> {
       file: { type: 'string', short: 'f' },
       output: { type: 'string', short: 'o' },
       verbose: { type: 'boolean', short: 'v', default: false },
+      'strict-source': { type: 'boolean', default: false },
       jsnice: { type: 'boolean', default: false },
       'jsnice-url': { type: 'string' },
       'jsnice-no-transpile': { type: 'boolean', default: false },
@@ -86,6 +92,7 @@ async function main(): Promise<void> {
     enabledPasses: [...DEFAULT_ENABLED_PASSES],
     lenientMode: false,
     autoFix: true,
+    assumeCompactSource: !values['strict-source'],
     // Stream the pass log as it is produced instead of dumping it at the end.
     onLog: values.verbose
       ? (_line, entry) => process.stderr.write(`${color ? ansi(entry) : plain(entry)}\n`)

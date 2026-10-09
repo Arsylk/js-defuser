@@ -1298,7 +1298,13 @@ export function freeReferences(path: NodePath): FreeRefs {
  * them here (noteSourceText). The orchestrator sets the current run's record
  * before every pass, so concurrent runs never see each other's.
  */
-export type SourceFacts = { texts: string[]; newlineFree: boolean };
+/**
+ * What the original text tells the passes: the texts functions may print
+ * themselves as (integrity locks hash them), and whether any function's text
+ * held a newline — unless `assumeCompact`, under which the input is taken for
+ * a pretty-printed copy of a compact deployment (see DeobfuscationOptions).
+ */
+export type SourceFacts = { texts: string[]; newlineFree: boolean; assumeCompact?: boolean };
 let currentSourceFacts: SourceFacts | null = null;
 export function setSourceFacts(facts: SourceFacts | null): void {
   currentSourceFacts = facts;
@@ -1310,7 +1316,7 @@ export function noteSourceText(text: string): void {
   const facts = currentSourceFacts;
   if (!facts || facts.texts.includes(text)) return;
   facts.texts.push(text);
-  if (!functionsNewlineFree(text)) facts.newlineFree = false;
+  if (!facts.assumeCompact && !functionsNewlineFree(text)) facts.newlineFree = false;
 }
 
 /**

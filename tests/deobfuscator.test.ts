@@ -524,9 +524,13 @@ describe('structural primitives', () => {
     const result = await recover(flat);
     expect(await execute(result.deobfuscatedCode)).toEqual(['1']);
     expect(result.deobfuscatedCode).not.toMatch(/RegExp|while \(true\)/);
-    // with a newline in the original, g's own text matches: left alone
+    // with a newline in the original, g's own text matches: the literal
+    // reading leaves the test alone; the default takes the input for a
+    // pretty-printed copy of a compact program and settles it the same way
     const tall = `(function(){function g(){\nreturn 1}function chk(){return new RegExp("\\n").test(g)}if(chk()){while(true){}}console.log(g())})();`;
-    expect((await recover(tall)).deobfuscatedCode).toMatch(/RegExp/);
+    const literal = await deobfuscate(tall, { enabledPasses: [...DEFAULT_ENABLED_PASSES], lenientMode: false, autoFix: false, assumeCompactSource: false });
+    expect(literal.deobfuscatedCode).toMatch(/RegExp/);
+    expect((await recover(tall)).deobfuscatedCode).not.toMatch(/RegExp|while \(true\)/);
   });
 
   it('recovers greet from the medium and locks presets to a few lines', async () => {
