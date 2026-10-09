@@ -2,6 +2,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, join } from 'node:path';
 import { parseArgs } from 'node:util';
+import './sandbox-node.js';
 import { DEFAULT_ENABLED_PASSES, deobfuscate } from './deobfuscator.js';
 import { ansi, createConsoleLogger, plain, supportsColor } from './logger.js';
 

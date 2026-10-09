@@ -161,7 +161,8 @@ import {
 } from './analysis.js';
 import { applyJsNice, type JsNiceOptions } from './jsnice.js';
 import { ownContextSensitive, passCffRecover } from './cff.js';
-import * as vm from 'node:vm';
+import { createSandbox } from './sandbox.js';
+import { base64ToBytes, bytesToBase64, bufferToString, latin1Decode, latin1Encode, utf8Decode, utf8Encode, type Encoding } from './base64.js';
 import { createLogger, type Entry, type Logger } from './logger.js';
 
 export type { JsNiceOptions } from './jsnice.js';
@@ -930,7 +931,7 @@ function prePassBase64(code: string, log: Logger): string {
   const out = code.replace(/\batob\(\s*["']([A-Za-z0-9+/=]+)["']\s*\)/g, (_m, b64) => {
     try {
       n++;
-      return JSON.stringify(Buffer.from(b64, 'base64').toString('utf8'));
+      return JSON.stringify(utf8Decode(base64ToBytes(b64)));
     } catch {
       return _m;
     }
@@ -2711,8 +2712,8 @@ function passAtob(ast: t.File, log: Logger): number {
       try {
         const r =
           name === 'atob'
-            ? Buffer.from(arg.value, 'base64').toString('utf8')
-            : Buffer.from(arg.value, 'utf8').toString('base64');
+            ? utf8Decode(base64ToBytes(arg.value))
+            : bytesToBase64(utf8Encode(arg.value));
         p.replaceWith(t.stringLiteral(r));
         n++;
       } catch {
@@ -2770,9 +2771,9 @@ function passBufferDecoding(ast: t.File, log: Logger): number {
     return null;
   }
 
-  function normalizeEncoding(value: string | null | undefined): BufferEncoding | null {
+  function normalizeEncoding(value: string | null | undefined): Encoding | null {
     if (!value) return null;
-    const enc = value.toLowerCase().replace(/[-_\s]/g, '') as BufferEncoding;
+    const enc = value.toLowerCase().replace(/[-_\s]/g, '') as Encoding;
     if (enc === 'utf8') return 'utf8';
     if (enc === 'base64') return 'base64';
     if (enc === 'base64url') return 'base64url';
@@ -2791,7 +2792,7 @@ function passBufferDecoding(ast: t.File, log: Logger): number {
     const toEnc = normalizeEncoding(outputEnc) ?? 'utf8';
     if (!['base64', 'base64url', 'hex'].includes(fromEnc)) return null;
     try {
-      return Buffer.from(input, fromEnc).toString(toEnc);
+      return bufferToString(input, fromEnc, toEnc);
     } catch {
       return null;
     }
@@ -3294,7 +3295,6 @@ function passClosureStringDecoder(ast: t.File, log: Logger): number {
   const lookupMap = new Map<string, Map<number, string>>();
   const probeLookup = new Map<string, string>();
   try {
-    const { Script, createContext } = vm;
     const sandbox: Record<string, unknown> = Object.create(null);
     // Provide builtins the shuffler's checksum arithmetic may need
     Object.assign(sandbox, {
@@ -3316,29 +3316,30 @@ function passClosureStringDecoder(ast: t.File, log: Logger): number {
       RangeError,
       undefined: undefined,
       Symbol: typeof Symbol !== 'undefined' ? Symbol : () => ({}),
-      atob: (s: string) => Buffer.from(s, 'base64').toString('utf8'),
-      btoa: (s: string) => Buffer.from(s, 'utf8').toString('base64'),
-      Buffer,
+      atob: (s: string) => utf8Decode(base64ToBytes(s)),
+      btoa: (s: string) => bytesToBase64(utf8Encode(s)),
+      Buffer: typeof Buffer !== 'undefined' ? Buffer : undefined,
     });
     for (const dec of callableNames) {
       (sandbox as Record<string, unknown>)[`__lut_${dec}`] = {};
     }
     (sandbox as Record<string, unknown>).__probe_lut = {};
-    const ctx = createContext(sandbox);
-    new Script(script).runInContext(ctx, { timeout: 10000 });
+    const ctx = createSandbox(sandbox);
+    ctx.run(script, 10000);
 
     for (const dec of callableNames) {
-      const raw = (sandbox as Record<string, Record<string, unknown>>)[`__lut_${dec}`];
+      const raw = ctx.get(`__lut_${dec}`) as Record<string, unknown> | undefined;
       const m = new Map<number, string>();
       for (const [k, v] of Object.entries(raw ?? {})) {
         if (typeof v === 'string') m.set(Number(k), v);
       }
       if (m.size > 0) lookupMap.set(dec, m);
     }
-    const rawProbe = (sandbox as Record<string, Record<string, unknown>>).__probe_lut;
+    const rawProbe = ctx.get('__probe_lut') as Record<string, unknown> | undefined;
     for (const [k, v] of Object.entries(rawProbe ?? {})) {
       if (typeof v === 'string') probeLookup.set(k, v);
     }
+    ctx.dispose();
   } catch (e) {
     log.fail(
       'b05a',
@@ -3583,8 +3584,8 @@ function buildDecoderSandbox(): Record<string, unknown> {
   sb['encodeURI'] = encodeURI;
   sb['unescape'] = unescape;
   sb['escape'] = escape;
-  sb['atob'] = (s: string) => Buffer.from(String(s), 'base64').toString('binary');
-  sb['btoa'] = (s: string) => Buffer.from(String(s), 'binary').toString('base64');
+  sb['atob'] = (s: string) => latin1Decode(base64ToBytes(String(s)));
+  sb['btoa'] = (s: string) => bytesToBase64(latin1Encode(String(s)));
   return sb;
 }
 
@@ -3887,9 +3888,8 @@ function passPoolDecoder(ast: t.File, log: Logger): number {
   const compiled = new Map<t.Identifier, (idx: number) => unknown>();
   for (const [bindingId, def] of decoders) {
     try {
-      const { Script, createContext } = vm;
-      const ctx = createContext(buildDecoderSandbox());
-      const fn = new Script(`${def.src}\n__dec;`).runInContext(ctx, { timeout: 5000 });
+      const ctx = createSandbox(buildDecoderSandbox());
+      const fn = ctx.run(`${def.src}\n__dec;`, 5000);
       if (typeof fn !== 'function') continue;
       const memo = new Map<number, unknown>();
       compiled.set(bindingId, (idx: number) => {
@@ -4095,11 +4095,9 @@ function passIdentityTable(ast: t.File, log: Logger): number {
 
       // Build it in a sandbox and index the distinct row objects.
       try {
-        const { Script, createContext } = vm;
-        const ctx = createContext(buildDecoderSandbox());
-        const built = new Script(
-          `${helpers.join('\n')}\nvar __tbl = ${generate(init).code};\n__tbl;`
-        ).runInContext(ctx, { timeout: 5000 });
+        const ctx = createSandbox(buildDecoderSandbox());
+        const built = ctx.run(`${helpers.join('\n')}\nvar __tbl = ${generate(init).code};\n__tbl;`, 5000);
+        ctx.dispose();
         if (!Array.isArray(built)) return;
 
         // Assign a stable id per distinct row object reachable as a cell.
@@ -5520,7 +5518,6 @@ function passConcealedStrings(ast: t.File, log: Logger, strict = false): number 
   }
 
   // ── probe and fold ────────────────────────────────────────────────────────
-  const { Script, createContext } = vm;
   let folded = 0;
   let evaluated = 0;
   for (const r of retrievers) {
@@ -5568,11 +5565,12 @@ function passConcealedStrings(ast: t.File, log: Logger, strict = false): number 
         `    __dq_out[__dq_c[0]] = __dq_r; } catch (__dq_e) { __dq_out[__dq_c[0]] = null; } }\n` +
         `return JSON.stringify(__dq_out); })()`;
       try {
-        const ctx = createContext({
+        const ctx = createSandbox({
           __dq_utf8: (bytes: number[]) => new TextDecoder().decode(new Uint8Array(bytes)),
         });
-        new Script('Math.random = function () { throw new Error("nondeterministic"); };').runInContext(ctx);
-        const raw = new Script(script).runInContext(ctx, { timeout: 3000 });
+        ctx.run('Math.random = function () { throw new Error("nondeterministic"); };');
+        const raw = ctx.run(script, 3000);
+        ctx.dispose();
         const parsed = JSON.parse(String(raw)) as Record<string, string | null>;
         return sites.map((_, i) => parsed[i] ?? null);
       } catch {
@@ -10759,7 +10757,6 @@ function passClosedFunctionEval(ast: t.File, log: Logger): number {
     if (sites.length) literalSites.set(b, sites);
   }
 
-  const { Script, createContext } = vm;
   let folded = 0;
   let removedGroups = 0;
   let evaluated = 0;
@@ -10907,16 +10904,17 @@ function passClosedFunctionEval(ast: t.File, log: Logger): number {
           `  } catch (__dq_e) { __dq_out[__dq_c[0]] = { ok: false }; }\n` +
           `}\nreturn JSON.stringify(__dq_out);\n})()`;
         try {
-          const ctx = createContext({
-            __dq_atob: (x: string) => Buffer.from(x, 'base64').toString('binary'),
-            __dq_btoa: (x: string) => Buffer.from(x, 'binary').toString('base64'),
+          const ctx = createSandbox({
+            __dq_atob: (x: string) => latin1Decode(base64ToBytes(x)),
+            __dq_btoa: (x: string) => bytesToBase64(latin1Encode(x)),
           });
-          new Script(
+          ctx.run(
             'Math.random = function () { throw new Error("nondeterministic"); };' +
               'var atob = function (s) { return __dq_atob(String(s)); };' +
               'var btoa = function (s) { return __dq_btoa(String(s)); };'
-          ).runInContext(ctx);
-          const raw = new Script(script).runInContext(ctx, { timeout: 3000 });
+          );
+          const raw = ctx.run(script, 3000);
+          ctx.dispose();
           const parsed = JSON.parse(String(raw)) as Record<string, Result>;
           return probeList.map((_, i) => parsed[i] ?? { ok: false });
         } catch {
@@ -11928,9 +11926,9 @@ function vmEvalHook(code: string, log: Logger): string | null {
       decodeURIComponent,
       encodeURI,
       decodeURI,
-      atob: (s: string) => Buffer.from(s, 'base64').toString('utf8'),
-      btoa: (s: string) => Buffer.from(s, 'utf8').toString('base64'),
-      Buffer,
+      atob: (s: string) => utf8Decode(base64ToBytes(s)),
+      btoa: (s: string) => bytesToBase64(utf8Encode(s)),
+      Buffer: typeof Buffer !== 'undefined' ? Buffer : undefined,
       console: { log: () => {}, warn: () => {}, error: () => {}, info: () => {} },
       navigator: { userAgent: 'Mozilla/5.0' },
       location: { href: '', hostname: '' },
@@ -11965,23 +11963,20 @@ function vmEvalHook(code: string, log: Logger): string | null {
   }
 
   try {
-    const { Script, createContext } = vm;
-    const ctx = createContext(buildSandbox());
+    const ctx = createSandbox(buildSandbox());
 
     // Primary attempt — run code directly
     // Fallback: if duplicate `var` declarations crash strict-mode VM, wrap in IIFE
     // which creates a function scope where `var` hoisting makes duplicates harmless.
     let ran = false;
     try {
-      new Script(code).runInContext(ctx, { timeout: VM_EVAL_TIMEOUT_MS });
+      ctx.run(code, VM_EVAL_TIMEOUT_MS);
       ran = true;
     } catch (e1) {
       const msg1 = e1 instanceof Error ? e1.message : String(e1);
-      if (/already been declared/i.test(msg1)) {
+      if (/already been declared|redeclaration/i.test(msg1)) {
         try {
-          new Script('(function(){\n' + code + '\n})();').runInContext(ctx, {
-            timeout: VM_EVAL_TIMEOUT_MS,
-          });
+          ctx.run('(function(){\n' + code + '\n})();', VM_EVAL_TIMEOUT_MS);
           ran = true;
           log.note('vm-eval-hook: iife fallback succeeded', 'duplicate var declarations');
         } catch {

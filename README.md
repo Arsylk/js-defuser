@@ -41,7 +41,7 @@ npx js-defuser -f in.js -o out.js
 ```
 
 Node 20 or newer. No network access, no native modules; the only runtime
-dependencies are the Babel parser/traverser/generator.
+dependencies are the Babel parser/traverser/generator. For browsers see below.
 
 ## Command line
 
@@ -77,8 +77,24 @@ result.log / result.entries; // the pass log, plain lines and structured
 result.metadata;           // sizes, reduction, unresolved evals, …
 ```
 
-`STRUCTURAL_PASSES` describes every pass with a one-line explanation; pass names in
+`PASS_CATALOG` describes every pass with a one-line explanation; pass names in
 `enabledPasses` select which ones run. The defaults are the full safe set.
+
+### In the browser
+
+```ts
+import { deobfuscate, prepare } from 'js-defuser/browser';
+await prepare(); // loads the WebAssembly sandbox once (~1 MB)
+```
+
+The same engine, with its sandboxed evaluations running on QuickJS compiled to
+WebAssembly instead of `node:vm` — a separate JavaScript engine with its own heap and
+an interrupt-based time budget, so nothing the evaluated slices do can reach the page.
+Needs the optional peer dependencies `quickjs-emscripten-core` and
+`@jitl/quickjs-singlefile-browser-release-sync`; run it in a Web Worker, the engine is
+synchronous while it works. `js-defuser/logger` exports the log renderers and the
+palette without the engine. A test keeps the two sandboxes producing byte-identical
+recoveries; the live demo is [arsylk.github.io/js-defuse-web](https://arsylk.github.io/js-defuse-web/).
 
 ## What it recovers
 

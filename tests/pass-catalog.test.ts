@@ -1,6 +1,15 @@
 import { expect, it } from 'vitest';
 import { DEFAULT_ENABLED_PASSES } from '../src/deobfuscator.js';
-import { STRUCTURAL_PASSES, withStructuralPasses } from '../src/pass-catalog.js';
+import { PASS_CATALOG, STRUCTURAL_PASSES, withStructuralPasses } from '../src/pass-catalog.js';
+
+it('flags every catalogued pass exactly as the default run treats it', () => {
+  const names = PASS_CATALOG.map((p) => p.name);
+  expect(new Set(names).size).toBe(names.length);
+  const defaults: readonly string[] = DEFAULT_ENABLED_PASSES;
+  for (const pass of PASS_CATALOG) expect([pass.name, pass.enabled_by_default]).toEqual([pass.name, defaults.includes(pass.name)]);
+  const orders = PASS_CATALOG.map((p) => p.pass_order);
+  expect([...orders].sort((a, b) => a - b)).toEqual(orders);
+});
 
 it('exposes every structural primitive with the engine default', () => {
   expect(STRUCTURAL_PASSES).toHaveLength(27);

@@ -59,7 +59,7 @@ import * as t from '@babel/types';
 import type { Logger } from './logger.js';
 import { getSourceFacts } from './analysis.js';
 
-import * as vm from 'node:vm';
+import { createSandbox, type SandboxContext } from './sandbox.js';
 
 class Abort extends Error {}
 
@@ -307,15 +307,12 @@ function closedHelpers(ast: t.File): Helpers {
 /** Methods that change their receiver. */
 const MUTATING = new Set(['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse', 'fill', 'copyWithin', 'set', 'add', 'delete', 'clear']);
 
-function makeSandbox(h: Helpers): import('vm').Context {
+function makeSandbox(h: Helpers): SandboxContext {
   const src: string[] = [];
   for (const [n, v] of h.data) src.push(`var ${n} = ${generate(v).code};`);
   for (const f of h.closed) src.push(generate(h.fns.get(f)!).code);
-  const ctx = vm.createContext({});
-  new vm.Script('Math.random = function () { throw new Error("nondeterministic"); };\n' + src.join('\n')).runInContext(
-    ctx,
-    { timeout: 2000 }
-  );
+  const ctx = createSandbox({});
+  ctx.run('Math.random = function () { throw new Error("nondeterministic"); };\n' + src.join('\n'), 2000);
   return ctx;
 }
 
@@ -365,11 +362,9 @@ function pureOver(e: t.Node, xs: Set<string>, h: Helpers): boolean {
   return ok;
 }
 
-function evalIn(ctx: import('vm').Context, e: t.Node, env: Record<string, number[]>): unknown {
+function evalIn(ctx: SandboxContext, e: t.Node, env: Record<string, number[]>): unknown {
   const params = Object.keys(env);
-  const fn = new vm.Script(`(function (${params.join(',')}) { return (${generate(e).code}); })`).runInContext(ctx, {
-    timeout: 1000,
-  }) as (...a: unknown[]) => unknown;
+  const fn = ctx.run(`(function (${params.join(',')}) { return (${generate(e).code}); })`, 1000) as (...a: unknown[]) => unknown;
   return fn(...params.map((p) => env[p].slice()));
 }
 
@@ -441,7 +436,7 @@ const mentions = (n: t.Node, name: string): boolean => {
  * array and mentions it with its value. Nested functions are left alone: they
  * run later, when the array may hold something else.
  */
-function concretize(stmt: t.Statement, X: string, arr: number[], ctx: import('vm').Context, h: Helpers): t.Statement {
+function concretize(stmt: t.Statement, X: string, arr: number[], ctx: SandboxContext, h: Helpers): t.Statement {
   const xs = new Set([X]);
   const file = t.file(t.program([t.cloneNode(stmt, true)]));
   traverse(file, {
@@ -577,7 +572,7 @@ function dispatcherShape(loop: t.WhileStatement): { X: string; sum: string; sw: 
   return { X: tst.left.arguments[0].name, sum: tst.left.callee.name, sw };
 }
 
-function buildCfg(loop: t.WhileStatement, init: number[], ctx: import('vm').Context, h: Helpers): Node {
+function buildCfg(loop: t.WhileStatement, init: number[], ctx: SandboxContext, h: Helpers): Node {
   const shape = dispatcherShape(loop);
   if (!shape) throw new Abort('loop shape');
   const { X, sum, sw } = shape;
@@ -930,7 +925,7 @@ function findDispatchers(ast: t.File): Map<t.FunctionDeclaration, Dispatcher> {
   return out;
 }
 
-function staticArray(e: t.Node | undefined, ctx: import('vm').Context, h: Helpers): number[] | null {
+function staticArray(e: t.Node | undefined, ctx: SandboxContext, h: Helpers): number[] | null {
   if (!e || !t.isArrayExpression(e)) return null;
   for (const el of e.elements) {
     if (!el) return null;
@@ -944,7 +939,7 @@ function staticArray(e: t.Node | undefined, ctx: import('vm').Context, h: Helper
   }
 }
 
-function expandDispatchers(ast: t.File, ctx: import('vm').Context, h: Helpers, why: string[]): { ast: t.File; n: number } {
+function expandDispatchers(ast: t.File, ctx: SandboxContext, h: Helpers, why: string[]): { ast: t.File; n: number } {
   let n = 0;
   for (let round = 0; round < 50; round++) {
     const disp = findDispatchers(ast);
@@ -1009,7 +1004,7 @@ function expandDispatchers(ast: t.File, ctx: import('vm').Context, h: Helpers, w
  * depend on any state, so it is the constant the sandbox computes. The callee
  * must be the root helper itself (names are unique, see uniquifyHelperNames).
  */
-function foldHelperCalls(ast: t.File, ctx: import('vm').Context, h: Helpers): number {
+function foldHelperCalls(ast: t.File, ctx: SandboxContext, h: Helpers): number {
   let n = 0;
   const literal = (a: t.Node): boolean =>
     t.isNumericLiteral(a) || t.isStringLiteral(a) || (t.isUnaryExpression(a, { operator: '-' }) && t.isNumericLiteral(a.argument));
@@ -1432,7 +1427,7 @@ const calleeName = (c: t.CallExpression): t.Identifier | null => {
  *  while (SUM(S) !== T) … })(R0, A); }` — a flattened inner function whose state array is its
  * first argument. When every call of V passes the same static array, linearise in place.
  */
-function linearizeNested(ast: t.File, ctx: import('vm').Context, h: Helpers, why: string[]): number {
+function linearizeNested(ast: t.File, ctx: SandboxContext, h: Helpers, why: string[]): number {
   let n = 0;
   traverse(ast, {
     WhileStatement(lp) {
@@ -2086,7 +2081,7 @@ export function passCffRecover(ast: t.File, log: Logger): number {
   let work = reparse(ast);
   if (uniquifyHelperNames(work)) work = reparse(work);
   let helpers: Helpers;
-  let ctx: import('vm').Context;
+  let ctx: SandboxContext;
   try {
     helpers = closedHelpers(work);
     pureHelpers = helpers.closed;

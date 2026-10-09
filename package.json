@@ -1,7 +1,7 @@
 {
   "name": "js-defuser",
-  "version": "0.1.0",
-  "description": "Sound, fully automatic JavaScript deobfuscator: recovers js-confuser (every transform at max settings, locks included) and javascript-obfuscator output back to readable source without executing it.",
+  "version": "0.2.0",
+  "description": "Sound, fully automatic JavaScript deobfuscator: recovers js-confuser (every transform at max settings, locks included) and javascript-obfuscator output back to readable source without executing it. Runs on Node and, via js-defuser/browser, in the browser.",
   "license": "MIT",
   "author": "Arsylk",
   "repository": {
@@ -35,7 +35,15 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./package.json": "./package.json"
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js"
+    },
+    "./package.json": "./package.json",
+    "./logger": {
+      "types": "./dist/logger.d.ts",
+      "import": "./dist/logger.js"
+    }
   },
   "files": [
     "dist",
@@ -45,11 +53,12 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node -e \"require('node:fs').chmodSync('dist/cli.js', 0o755)\"",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run tests/deobfuscator.test.ts tests/logger.test.ts tests/pass-catalog.test.ts",
+    "test": "vitest run tests/deobfuscator.test.ts tests/logger.test.ts tests/pass-catalog.test.ts tests/sandbox.test.ts",
     "test:gates": "tsc -p tsconfig.build.json && vitest run tests/gates.test.ts",
     "test:all": "tsc -p tsconfig.build.json && vitest run",
     "deobfuscate": "node dist/cli.js",
-    "prepublishOnly": "npm run typecheck && npm run build"
+    "prepublishOnly": "npm run typecheck && npm run build",
+    "prepare": "npm run build"
   },
   "dependencies": {
     "@babel/core": "^7.29.7",
@@ -60,10 +69,24 @@
     "@babel/types": "^7.29.7"
   },
   "devDependencies": {
+    "@jitl/quickjs-singlefile-browser-release-sync": "^0.32.0",
     "@types/babel__generator": "^7.27.0",
     "@types/babel__traverse": "^7.28.0",
     "@types/node": "^20.19.43",
+    "quickjs-emscripten-core": "^0.32.0",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"
+  },
+  "peerDependencies": {
+    "quickjs-emscripten-core": ">=0.31.0",
+    "@jitl/quickjs-singlefile-browser-release-sync": ">=0.31.0"
+  },
+  "peerDependenciesMeta": {
+    "quickjs-emscripten-core": {
+      "optional": true
+    },
+    "@jitl/quickjs-singlefile-browser-release-sync": {
+      "optional": true
+    }
   }
 }
