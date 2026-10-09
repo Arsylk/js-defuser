@@ -1,0 +1,130 @@
+{
+  "generator": "js-confuser 2.1.3",
+  "options": {
+    "target": "node",
+    "compact": true,
+    "renameVariables": true,
+    "renameGlobals": true,
+    "identifierGenerator": "mangled"
+  },
+  "cases": [
+    {
+      "name": "01-hoisted-closure.js",
+      "code": "(function(){var a=[];function b(){return typeof c+\":\"+String(c)}a[\"push\"](b());var c;c=Math[\"max\"];a[\"push\"](b(),c(3,9));console[\"log\"](a[\"join\"](\"|\"))})();"
+    },
+    {
+      "name": "02-param-observed.js",
+      "code": "function a(d,e,f){if(e===undefined){e=10}f=d+e;return f}function b(c,d){var g=d;d=5;return[g,d,c]}function c(c,d){d=arguments[\"length\"];return c+d}function d(a,b){b=2;return arguments[1]}console[\"log\"](a(1),a(1,2),JSON[\"stringify\"](b(1,7)),c(1,99),d(1,9));"
+    },
+    {
+      "name": "03-table-mutation.js",
+      "code": "(function(){var a={[\"add\"]:function(c,d){return c+d},[\"k\"]:\"key\"};var b={[\"mul\"]:function(c,d){return c*d},[\"v\"]:1};b[\"v\"]=2;var c={[\"f\"]:function(){return this[\"n\"]},[\"n\"]:7};var d={[\"z\"]:3};function e(a){a[\"z\"]=99}e(d);console[\"log\"](a[\"add\"](2,3),a[\"k\"],b[\"mul\"](b[\"v\"],5),c[\"f\"](),d[\"z\"])})();"
+    },
+    {
+      "name": "04-eval-order.js",
+      "code": "(function(){var a=[];function b(b){a[\"push\"](b);return b}var c={[\"sub\"]:function(c,d){return d-c},[\"sel\"]:function(c,d){return c||d}};var d=c[\"sub\"](b(1),b(5));var e=c[\"sel\"](b(0),b(4));var f=0;var g={get[\"v\"](){f++;return f}};var h=c[\"sub\"](g[\"v\"],g[\"v\"]);console[\"log\"](d,e,h,a[\"join\"](\",\"))})();"
+    },
+    {
+      "name": "05-alias-loop.js",
+      "code": "(function(){var a=[];var b=[function(a){return a+1},function(a){return a*2}];for(var c=0;c<2;c++){var d;d=b[c];a[\"push\"](d(10))}var e;for(var f=0;f<3;f++){if(f===1){e=String}}a[\"push\"](typeof e);console[\"log\"](a[\"join\"](\",\"))})();"
+    },
+    {
+      "name": "06-strings.js",
+      "code": "var a=\"alpha|beta|gamma\"[\"split\"](\"|\");var b=\"Hello\"[\"charCodeAt\"](1)+\"x\"[\"repeat\"](3)+\"abc\"[\"toUpperCase\"]()+\"a-b\"[\"replace\"](\"-\",\"+\");var c=[\"x\",\"y\"][\"join\"](\"/\")+\"lit\"[\"length\"];console[\"log\"](a[\"length\"],a[2],b,c,\"tpl\"+(1+1),\"AB\");"
+    },
+    {
+      "name": "07-switch-labels.js",
+      "code": "(function(){var a=[];a:for(var b=0;b<4;b++){switch(b){case 0:a[\"push\"](\"zero\");case 1:a[\"push\"](\"one-ish\");break;case 2:continue a;default:a[\"push\"](\"d\"+b);break a}a[\"push\"](\"after\"+b)}console[\"log\"](a[\"join\"](\",\"))})();"
+    },
+    {
+      "name": "08-try-finally.js",
+      "code": "function a(a){var b;var c;try{if(a){throw new Error(\"e\"+a)}b=\"ok\"}catch(e){b=e[\"message\"]}finally{c=\"fin\"}return b+c}function b(){var b;try{return b=1}finally{b=2}}console[\"log\"](a(0),a(3),b());"
+    },
+    {
+      "name": "09-generators-async.js",
+      "code": "function*a(a){var b;for(b=0;b<a;b++){yield b*b}}async function b(a){var b;b=await Promise[\"resolve\"](a+1);return b*2}console[\"log\"]([...a(4)][\"join\"](\",\"));b(4)[\"then\"](function(a){console[\"log\"](\"async\",a)});"
+    },
+    {
+      "name": "11-this-binding.js",
+      "code": "var a={[\"name\"]:\"o\",[\"get\"]:function(){return this&&this[\"name\"]}};var b=a[\"get\"];var c={[\"f\"]:a[\"get\"]};console[\"log\"]((0,a[\"get\"])()===undefined||(0,a[\"get\"])()===\"\",a[\"get\"](),c[\"f\"][\"call\"]({[\"name\"]:\"z\"}));"
+    },
+    {
+      "name": "12-valueof-order.js",
+      "code": "(function(){var a=[];var b={[\"valueOf\"]:function(){a[\"push\"](\"a\");return 1}};var c={[\"valueOf\"]:function(){a[\"push\"](\"b\");return 2}};var d={[\"plus\"]:function(a,b){return a+b},[\"rev\"]:function(a,b){return b-a}};var e=d[\"plus\"](b,c)+d[\"rev\"](b,c);console[\"log\"](e,a[\"join\"](\"\"))})();"
+    },
+    {
+      "name": "13-sequences.js",
+      "code": "(function(){var a;var b;var c;var d=[];for(a=0,b=10,d[\"push\"](\"init\");a<3;d[\"push\"](\"upd\"+a),a++){d[\"push\"](\"body\"+a)}c=(d[\"push\"](\"x\"),d[\"push\"](\"y\"),d[\"length\"]);if(b=2,b>1){d[\"push\"](\"if\")}console[\"log\"](c,b,d[\"join\"](\",\"))})();"
+    },
+    {
+      "name": "14-closures-counter.js",
+      "code": "function a(){var a;var b;a=0;b=1;return{[\"inc\"]:function(){a+=b;return a},[\"set\"]:function(a){b=a}}}var b=a();b[\"inc\"]();b[\"set\"](5);b[\"inc\"]();console[\"log\"](b[\"inc\"]());"
+    },
+    {
+      "name": "15-decoder-stateful.js",
+      "code": "(function(){var a=[\"a\",\"b\",\"c\",\"d\"];function b(b){a[\"push\"](a[\"shift\"]());return a[b]}function c(a){return[\"x\",\"y\",\"z\"][a]}console[\"log\"](b(0),b(0),b(1),c(1),c(2))})();"
+    },
+    {
+      "name": "16-iife-params.js",
+      "code": "var a=function(c,d,e){var f=[typeof d,typeof e];d=c*2;return f[\"concat\"]([c,d])[\"join\"](\",\")}(3);var b=function a(b,g){return b<=0?g:a(b-1,(g||0)+b)}(4);console[\"log\"](a,b);"
+    },
+    {
+      "name": "18-regex-tagged.js",
+      "code": "function a(a,...b){return a[\"raw\"][\"join\"](\"|\")+b[\"join\"](\",\")}var b=new RegExp(\"a(b+)c\",\"g\");console[\"log\"](\"xabbbcx\"[\"replace\"](b,\"[$1]\"),a`one${1}two${\"2\"}\\n`);"
+    },
+    {
+      "name": "19-dispatch-cff.js",
+      "code": "(function(){var a=\"2|0|1\"[\"split\"](\"|\");var b=0;var c=[];while(true){switch(a[b++]){case\"0\":c[\"push\"](\"zero\");continue;case\"1\":c[\"push\"](\"one\");continue;case\"2\":c[\"push\"](\"two\");continue}break}console[\"log\"](c[\"join\"](\",\"))})();"
+    },
+    {
+      "name": "20-objects-json.js",
+      "code": "var a={[\"list\"]:[1,2,3],[\"nested\"]:{[\"k\"]:\"v\",\"with space\":true},[\"n\"]:null};var b=JSON[\"parse\"](JSON[\"stringify\"](a));b[\"list\"][\"push\"](4);var c=Object[\"keys\"](b)[\"sort\"]();console[\"log\"](c[\"join\"](\",\"),b[\"list\"][\"length\"],a[\"list\"][\"length\"],b[\"nested\"][\"with space\"]);"
+    },
+    {
+      "name": "21-bitwise.js",
+      "code": "function a(a){var b=2166136261;var c;for(c=0;c<a[\"length\"];c++){b^=a[\"charCodeAt\"](c);b=Math[\"imul\"](b,16777619)>>>0}return b}function b(a){a^=a<<13;a^=a>>>17;a^=a<<5;return a>>>0}console[\"log\"](a(\"hello\"),b(12345),255.9|0,-1>>>28,7.5&3);"
+    },
+    {
+      "name": "22-getter-table.js",
+      "code": "(function(){var a=0;var b={get[\"v\"](){return++a},[\"w\"]:1};console[\"log\"](b[\"v\"],b[\"v\"],b[\"w\"]);var c={[\"a\"]:1};Object[\"defineProperty\"](c,\"b\",{[\"get\"]:function(){return 42}});console[\"log\"](c[\"a\"],c[\"b\"])})();"
+    },
+    {
+      "name": "23-tdz.js",
+      "code": "(function(){var a=[];try{a[\"push\"](b)}catch(e){a[\"push\"](e[\"name\"])}let b=\"late\";a[\"push\"](b);const c=3;a[\"push\"](c*2);console[\"log\"](a[\"join\"](\",\"))})();"
+    },
+    {
+      "name": "24-nested-proxies.js",
+      "code": "(function(){var a={[\"f\"]:function(a,b){return a(b)},[\"g\"]:function(a,b){return a!==b}};var b={[\"h\"]:function(b,c){return a[\"f\"](b,c)},[\"k\"]:function(b,c){return a[\"g\"](b,c)}};function c(a){return a*a}console[\"log\"](b[\"h\"](c,7),b[\"k\"](1,2),b[\"k\"](\"a\",\"a\"))})();"
+    },
+    {
+      "name": "25-self-memo.js",
+      "code": "(function(){function a(){var b=\"q;w;e;r\"[\"split\"](\";\");a=function(){return b};return a()}function b(b){return a()[b-100]}(function(b,c){var d=b();while(d[0]!==c){d[\"push\"](d[\"shift\"]())}})(a,\"e\");console[\"log\"](b(100),b(103),b(101))})();"
+    },
+    {
+      "name": "26-escape-pool.js",
+      "code": "(function(){function a(){var b=[\"m\",\"n\",\"o\"];a=function(){return b};return a()}function b(b){return a()[b]}var c=b(0);a()[\"reverse\"]();console[\"log\"](c,b(0),b(2))})();"
+    },
+    {
+      "name": "27-arguments-callee.js",
+      "code": "function a(c,d){d=3;return arguments[\"length\"]+\":\"+c}var b=(e,f)=>{f=4;return e+f};console[\"log\"](a(1),a(1,2,3),b(1));"
+    },
+    {
+      "name": "28-conditional-stmts.js",
+      "code": "(function(){var a=[];var b=0;b>0?a[\"push\"](\"pos\"):a[\"push\"](\"nonpos\");b||a[\"push\"](\"falsy\");b&&a[\"push\"](\"never\");var c=b?1:(a[\"push\"](\"side\"),2);console[\"log\"](a[\"join\"](\",\"),c)})();"
+    },
+    {
+      "name": "29-greet.js",
+      "code": "function a(a){var b=\"Hello \"+a+\"!\";console[\"log\"](b)}a(\"Internet User\");"
+    }
+  ],
+  "skipped": [
+    {
+      "name": "10-eval.js",
+      "reason": "js-confuser output does not behave like the original"
+    },
+    {
+      "name": "17-class-getters.js",
+      "reason": "js-confuser output does not behave like the original"
+    }
+  ]
+}

@@ -1,0 +1,128 @@
+{
+  "generator": "js-confuser 2.1.3",
+  "options": {
+    "target": "node",
+    "compact": true,
+    "rgf": true
+  },
+  "cases": [
+    {
+      "name": "01-hoisted-closure.js",
+      "code": "function __p_a1di(__p__flag=true){return __p__flag}var __p_ah1Y_rgf_eval_integrity=__p_a1di();var __p_eZ9R_rgf=[__p_jUQT_rgf_eval(\"function __p_4OZd_embedded(){var[__p_eZ9R_rgf,__p_u1VL_args]=arguments;function __p_jgsH_replacement(){var log=[];function early(){return typeof alias+\\\":\\\"+String(alias)}log[\\\"push\\\"](early());var alias;alias=Math[\\\"max\\\"];log[\\\"push\\\"](early(),alias(3,9));console[\\\"log\\\"](log[\\\"join\\\"](\\\"|\\\"))}return __p_jgsH_replacement[\\\"apply\\\"](this,__p_u1VL_args)}__p_4OZd_embedded;\")];function __p_jUQT_rgf_eval(code){if(__p_ah1Y_rgf_eval_integrity){return eval(code)}}(function(){return __p_eZ9R_rgf[0][\"apply\"](this,[__p_eZ9R_rgf,arguments])})();"
+    },
+    {
+      "name": "02-param-observed.js",
+      "code": "function __p_54X3(__p__flag=true){return __p__flag}var __p_qZQc_rgf_eval_integrity=__p_54X3();var __p_WwFN_rgf=[__p_FDGj_rgf_eval(\"function __p_l0Eo_embedded(){var[__p_WwFN_rgf,__p_J3lY_args]=arguments;function __p_Yn1g_replacement(a,b,c){if(b===undefined){b=10}c=a+b;return c}return __p_Yn1g_replacement[\\\"apply\\\"](this,__p_J3lY_args)}__p_l0Eo_embedded;\"),__p_FDGj_rgf_eval(\"function __p_Hovr_embedded(){var[__p_WwFN_rgf,__p_q9uq_args]=arguments;function __p_lCPM_replacement(a,b){var r=b;b=5;return[r,b,a]}return __p_lCPM_replacement[\\\"apply\\\"](this,__p_q9uq_args)}__p_Hovr_embedded;\"),__p_FDGj_rgf_eval(\"function __p_M5Li_embedded(){var[__p_WwFN_rgf,__p_nN7j_args]=arguments;function __p_5hDb_replacement(a,b){b=arguments[\\\"length\\\"];return a+b}return __p_5hDb_replacement[\\\"apply\\\"](this,__p_nN7j_args)}__p_M5Li_embedded;\"),__p_FDGj_rgf_eval(\"function __p_04nF_embedded(){var[__p_WwFN_rgf,__p_acxm_args]=arguments;function __p_uGZ7_replacement(x,y){y=2;return arguments[1]}return __p_uGZ7_replacement[\\\"apply\\\"](this,__p_acxm_args)}__p_04nF_embedded;\")];function f(){return __p_WwFN_rgf[0][\"apply\"](this,[__p_WwFN_rgf,arguments])}function g(){return __p_WwFN_rgf[1][\"apply\"](this,[__p_WwFN_rgf,arguments])}function h(){return __p_WwFN_rgf[2][\"apply\"](this,[__p_WwFN_rgf,arguments])}function k(){return __p_WwFN_rgf[3][\"apply\"](this,[__p_WwFN_rgf,arguments])}function __p_FDGj_rgf_eval(code){if(__p_qZQc_rgf_eval_integrity){return eval(code)}}console[\"log\"](f(1),f(1,2),JSON[\"stringify\"](g(1,7)),h(1,99),k(1,9));"
+    },
+    {
+      "name": "03-table-mutation.js",
+      "code": "function __p_7aGI(__p__flag=true){return __p__flag}var __p_AYIN_rgf_eval_integrity=__p_7aGI();var __p_rC7S_rgf=[__p_1bhE_rgf_eval(\"function __p_fY5I_embedded(){var[__p_rC7S_rgf,__p_Svr1_args]=arguments;function __p_bUIM_replacement(){var T={[\\\"add\\\"]:function(a,b){return a+b},[\\\"k\\\"]:\\\"key\\\"};var U={[\\\"mul\\\"]:function(a,b){return a*b},[\\\"v\\\"]:1};U[\\\"v\\\"]=2;var V={[\\\"f\\\"]:function(){return this[\\\"n\\\"]},[\\\"n\\\"]:7};var W={[\\\"z\\\"]:3};function leak(o){o[\\\"z\\\"]=99}leak(W);console[\\\"log\\\"](T[\\\"add\\\"](2,3),T[\\\"k\\\"],U[\\\"mul\\\"](U[\\\"v\\\"],5),V[\\\"f\\\"](),W[\\\"z\\\"])}return __p_bUIM_replacement[\\\"apply\\\"](this,__p_Svr1_args)}__p_fY5I_embedded;\")];function __p_1bhE_rgf_eval(code){if(__p_AYIN_rgf_eval_integrity){return eval(code)}}(function(){return __p_rC7S_rgf[0][\"apply\"](this,[__p_rC7S_rgf,arguments])})();"
+    },
+    {
+      "name": "04-eval-order.js",
+      "code": "function __p_kSN2(__p__flag=true){return __p__flag}var __p_pt14_rgf_eval_integrity=__p_kSN2();var __p_VplI_rgf=[__p_B88Y_rgf_eval(\"function __p_PjN5_embedded(){var[__p_VplI_rgf,__p_Hfww_args]=arguments;function __p_wicX_replacement(){var trace=[];function t(x){trace[\\\"push\\\"](x);return x}var P={[\\\"sub\\\"]:function(a,b){return b-a},[\\\"sel\\\"]:function(a,b){return a||b}};var r1=P[\\\"sub\\\"](t(1),t(5));var r2=P[\\\"sel\\\"](t(0),t(4));var cnt=0;var obj={get[\\\"v\\\"](){cnt++;return cnt}};var r3=P[\\\"sub\\\"](obj[\\\"v\\\"],obj[\\\"v\\\"]);console[\\\"log\\\"](r1,r2,r3,trace[\\\"join\\\"](\\\",\\\"))}return __p_wicX_replacement[\\\"apply\\\"](this,__p_Hfww_args)}__p_PjN5_embedded;\")];function __p_B88Y_rgf_eval(code){if(__p_pt14_rgf_eval_integrity){return eval(code)}}(function(){return __p_VplI_rgf[0][\"apply\"](this,[__p_VplI_rgf,arguments])})();"
+    },
+    {
+      "name": "05-alias-loop.js",
+      "code": "function __p_n9fS(__p__flag=true){return __p__flag}var __p_NeQs_rgf_eval_integrity=__p_n9fS();var __p_XIpN_rgf=[__p_jjmt_rgf_eval(\"function __p_JHsj_embedded(){var[__p_XIpN_rgf,__p_Vkal_args]=arguments;function __p_wSAw_replacement(){var out=[];var fns=[function(x){return x+1},function(x){return x*2}];for(var i=0;i<2;i++){var f;f=fns[i];out[\\\"push\\\"](f(10))}var g;for(var j=0;j<3;j++){if(j===1){g=String}}out[\\\"push\\\"](typeof g);console[\\\"log\\\"](out[\\\"join\\\"](\\\",\\\"))}return __p_wSAw_replacement[\\\"apply\\\"](this,__p_Vkal_args)}__p_JHsj_embedded;\")];function __p_jjmt_rgf_eval(code){if(__p_NeQs_rgf_eval_integrity){return eval(code)}}(function(){return __p_XIpN_rgf[0][\"apply\"](this,[__p_XIpN_rgf,arguments])})();"
+    },
+    {
+      "name": "06-strings.js",
+      "code": "var s=\"alpha|beta|gamma\"[\"split\"](\"|\");var t2=\"Hello\"[\"charCodeAt\"](1)+\"x\"[\"repeat\"](3)+\"abc\"[\"toUpperCase\"]()+\"a-b\"[\"replace\"](\"-\",\"+\");var parts=[\"x\",\"y\"][\"join\"](\"/\")+\"lit\"[\"length\"];console[\"log\"](s[\"length\"],s[2],t2,parts,\"tpl\"+(1+1),\"AB\");"
+    },
+    {
+      "name": "07-switch-labels.js",
+      "code": "function __p_X15J(__p__flag=true){return __p__flag}var __p_Tf8q_rgf_eval_integrity=__p_X15J();var __p_qw08_rgf=[__p_shah_rgf_eval(\"function __p_6OrI_embedded(){var[__p_qw08_rgf,__p_CjB6_args]=arguments;function __p_SMMb_replacement(){var out=[];o7GWeI:for(var i=0;i<4;i++){switch(i){case 0:out[\\\"push\\\"](\\\"zero\\\");case 1:out[\\\"push\\\"](\\\"one-ish\\\");break;case 2:continue o7GWeI;default:out[\\\"push\\\"](\\\"d\\\"+i);break o7GWeI}out[\\\"push\\\"](\\\"after\\\"+i)}console[\\\"log\\\"](out[\\\"join\\\"](\\\",\\\"))}return __p_SMMb_replacement[\\\"apply\\\"](this,__p_CjB6_args)}__p_6OrI_embedded;\")];function __p_shah_rgf_eval(code){if(__p_Tf8q_rgf_eval_integrity){return eval(code)}}(function(){return __p_qw08_rgf[0][\"apply\"](this,[__p_qw08_rgf,arguments])})();"
+    },
+    {
+      "name": "08-try-finally.js",
+      "code": "function __p_60xa(__p__flag=true){return __p__flag}var __p_qJyO_rgf_eval_integrity=__p_60xa();var __p_Im0H_rgf=[__p_ub0E_rgf_eval(\"function __p_lfnQ_embedded(){var[__p_Im0H_rgf,__p_ZhED_args]=arguments;function __p_jXVB_replacement(x){var r;var q;try{if(x){throw new Error(\\\"e\\\"+x)}r=\\\"ok\\\"}catch(e){r=e[\\\"message\\\"]}finally{q=\\\"fin\\\"}return r+q}return __p_jXVB_replacement[\\\"apply\\\"](this,__p_ZhED_args)}__p_lfnQ_embedded;\"),__p_ub0E_rgf_eval(\"function __p_IedP_embedded(){var[__p_Im0H_rgf,__p_0RZF_args]=arguments;function __p_HS7f_replacement(){var a;try{return a=1}finally{a=2}}return __p_HS7f_replacement[\\\"apply\\\"](this,__p_0RZF_args)}__p_IedP_embedded;\")];function f(){return __p_Im0H_rgf[0][\"apply\"](this,[__p_Im0H_rgf,arguments])}function g(){return __p_Im0H_rgf[1][\"apply\"](this,[__p_Im0H_rgf,arguments])}function __p_ub0E_rgf_eval(code){if(__p_qJyO_rgf_eval_integrity){return eval(code)}}console[\"log\"](f(0),f(3),g());"
+    },
+    {
+      "name": "09-generators-async.js",
+      "code": "function __p_1jhW(__p__flag=true){return __p__flag}var __p_MFLj_rgf_eval_integrity=__p_1jhW();var __p_DJzg_rgf=[__p_HBZK_rgf_eval(\"function __p_DMiK_embedded(){var[__p_DJzg_rgf,__p_RGTQ_args]=arguments;function __p_zsLD_replacement(v){console[\\\"log\\\"](\\\"async\\\",v)}return __p_zsLD_replacement[\\\"apply\\\"](this,__p_RGTQ_args)}__p_DMiK_embedded;\")];function*gen(n){var i;for(i=0;i<n;i++){yield i*i}}async function af(x){var y;y=await Promise[\"resolve\"](x+1);return y*2}console[\"log\"]([...gen(4)][\"join\"](\",\"));function __p_HBZK_rgf_eval(code){if(__p_MFLj_rgf_eval_integrity){return eval(code)}}af(4)[\"then\"](function(){return __p_DJzg_rgf[0][\"apply\"](this,[__p_DJzg_rgf,arguments])});"
+    },
+    {
+      "name": "10-eval.js",
+      "code": "function __p_Pjdk(__p__flag=true){return __p__flag}var __p_pefN_rgf_eval_integrity=__p_Pjdk();var __p_jZZF_rgf=[__p_ifPg_rgf_eval(\"function __p_rFUB_embedded(){var[__p_jZZF_rgf,__p_C7YS_args]=arguments;function __p_fS4i_replacement(){var hidden=5;var alias=Math[\\\"min\\\"];console[\\\"log\\\"](eval(\\\"hidden + 1\\\"),alias(4,2))}return __p_fS4i_replacement[\\\"apply\\\"](this,__p_C7YS_args)}__p_rFUB_embedded;\")];function __p_ifPg_rgf_eval(code){if(__p_pefN_rgf_eval_integrity){return eval(code)}}(function(){return __p_jZZF_rgf[0][\"apply\"](this,[__p_jZZF_rgf,arguments])})();"
+    },
+    {
+      "name": "11-this-binding.js",
+      "code": "function __p_NA3n(__p__flag=true){return __p__flag}var __p_nu29_rgf_eval_integrity=__p_NA3n();var __p_eOyU_rgf=[__p_Lv4F_rgf_eval(\"function __p_ryId_embedded(){var[__p_eOyU_rgf,__p_p9Ed_args]=arguments;function __p_FUtn_replacement(){return this&&this[\\\"name\\\"]}return __p_FUtn_replacement[\\\"apply\\\"](this,__p_p9Ed_args)}__p_ryId_embedded;\")];var obj={[\"name\"]:\"o\",[\"get\"]:function(){return __p_eOyU_rgf[0][\"apply\"](this,[__p_eOyU_rgf,arguments])}};var getter=obj[\"get\"];var m={[\"f\"]:obj[\"get\"]};function __p_Lv4F_rgf_eval(code){if(__p_nu29_rgf_eval_integrity){return eval(code)}}console[\"log\"]((0,obj[\"get\"])()===undefined||(0,obj[\"get\"])()===\"\",obj[\"get\"](),m[\"f\"][\"call\"]({[\"name\"]:\"z\"}));"
+    },
+    {
+      "name": "12-valueof-order.js",
+      "code": "function __p_386o(__p__flag=true){return __p__flag}var __p_xpXH_rgf_eval_integrity=__p_386o();var __p_47sx_rgf=[__p_9Mdx_rgf_eval(\"function __p_Sj8Z_embedded(){var[__p_47sx_rgf,__p_9EDV_args]=arguments;function __p_cJBl_replacement(){var seq=[];var a={[\\\"valueOf\\\"]:function(){seq[\\\"push\\\"](\\\"a\\\");return 1}};var b={[\\\"valueOf\\\"]:function(){seq[\\\"push\\\"](\\\"b\\\");return 2}};var ops={[\\\"plus\\\"]:function(x,y){return x+y},[\\\"rev\\\"]:function(x,y){return y-x}};var r=ops[\\\"plus\\\"](a,b)+ops[\\\"rev\\\"](a,b);console[\\\"log\\\"](r,seq[\\\"join\\\"](\\\"\\\"))}return __p_cJBl_replacement[\\\"apply\\\"](this,__p_9EDV_args)}__p_Sj8Z_embedded;\")];function __p_9Mdx_rgf_eval(code){if(__p_xpXH_rgf_eval_integrity){return eval(code)}}(function(){return __p_47sx_rgf[0][\"apply\"](this,[__p_47sx_rgf,arguments])})();"
+    },
+    {
+      "name": "13-sequences.js",
+      "code": "function __p_0lm4(__p__flag=true){return __p__flag}var __p_qv5A_rgf_eval_integrity=__p_0lm4();var __p_L6zp_rgf=[__p_jZ9W_rgf_eval(\"function __p_cdi4_embedded(){var[__p_L6zp_rgf,__p_QiWZ_args]=arguments;function __p_UMbe_replacement(){var a;var b;var c;var log=[];for(a=0,b=10,log[\\\"push\\\"](\\\"init\\\");a<3;log[\\\"push\\\"](\\\"upd\\\"+a),a++){log[\\\"push\\\"](\\\"body\\\"+a)}c=(log[\\\"push\\\"](\\\"x\\\"),log[\\\"push\\\"](\\\"y\\\"),log[\\\"length\\\"]);if(b=2,b>1){log[\\\"push\\\"](\\\"if\\\")}console[\\\"log\\\"](c,b,log[\\\"join\\\"](\\\",\\\"))}return __p_UMbe_replacement[\\\"apply\\\"](this,__p_QiWZ_args)}__p_cdi4_embedded;\")];function __p_jZ9W_rgf_eval(code){if(__p_qv5A_rgf_eval_integrity){return eval(code)}}(function(){return __p_L6zp_rgf[0][\"apply\"](this,[__p_L6zp_rgf,arguments])})();"
+    },
+    {
+      "name": "14-closures-counter.js",
+      "code": "function __p_nPPN(__p__flag=true){return __p__flag}var __p_jD3T_rgf_eval_integrity=__p_nPPN();var __p_DypN_rgf=[__p_lGwt_rgf_eval(\"function __p_ZhQp_embedded(){var[__p_DypN_rgf,__p_qwrM_args]=arguments;function __p_j4gL_replacement(){var count;var step;count=0;step=1;return{[\\\"inc\\\"]:function(){count+=step;return count},[\\\"set\\\"]:function(s){step=s}}}return __p_j4gL_replacement[\\\"apply\\\"](this,__p_qwrM_args)}__p_ZhQp_embedded;\")];function makeCounter(){return __p_DypN_rgf[0][\"apply\"](this,[__p_DypN_rgf,arguments])}var c1=makeCounter();c1[\"inc\"]();c1[\"set\"](5);c1[\"inc\"]();function __p_lGwt_rgf_eval(code){if(__p_jD3T_rgf_eval_integrity){return eval(code)}}console[\"log\"](c1[\"inc\"]());"
+    },
+    {
+      "name": "15-decoder-stateful.js",
+      "code": "function __p_8v6g(__p__flag=true){return __p__flag}var __p_9R68_rgf_eval_integrity=__p_8v6g();var __p_XevS_rgf=[__p_toFv_rgf_eval(\"function __p_0lfn_embedded(){var[__p_XevS_rgf,__p_uDQw_args]=arguments;function __p_gxUA_replacement(){var pool=[\\\"a\\\",\\\"b\\\",\\\"c\\\",\\\"d\\\"];function rot(i){pool[\\\"push\\\"](pool[\\\"shift\\\"]());return pool[i]}function pure(i){return[\\\"x\\\",\\\"y\\\",\\\"z\\\"][i]}console[\\\"log\\\"](rot(0),rot(0),rot(1),pure(1),pure(2))}return __p_gxUA_replacement[\\\"apply\\\"](this,__p_uDQw_args)}__p_0lfn_embedded;\")];function __p_toFv_rgf_eval(code){if(__p_9R68_rgf_eval_integrity){return eval(code)}}(function(){return __p_XevS_rgf[0][\"apply\"](this,[__p_XevS_rgf,arguments])})();"
+    },
+    {
+      "name": "17-class-getters.js",
+      "code": "class P{constructor(x){this[\"x\"]=x}get[\"double\"](){return this[\"x\"]*2}static[\"make\"](v){return new P(v)}set[\"val\"](v){this[\"x\"]=v}}var p=P[\"make\"](4);p[\"val\"]=6;console[\"log\"](p[\"double\"],P[\"name\"]);"
+    },
+    {
+      "name": "18-regex-tagged.js",
+      "code": "function __p_SsAO(__p__flag=true){return __p__flag}var __p_JtSJ_rgf_eval_integrity=__p_SsAO();var __p_zYps_rgf=[__p_nOIx_rgf_eval(\"function __p_wmbM_embedded(){var[__p_zYps_rgf,__p_0gJU_args]=arguments;function __p_xdOy_replacement(strs,...vals){return strs[\\\"raw\\\"][\\\"join\\\"](\\\"|\\\")+vals[\\\"join\\\"](\\\",\\\")}return __p_xdOy_replacement[\\\"apply\\\"](this,__p_0gJU_args)}__p_wmbM_embedded;\")];function tag(){return __p_zYps_rgf[0][\"apply\"](this,[__p_zYps_rgf,arguments])}var re=new RegExp(\"a(b+)c\",\"g\");function __p_nOIx_rgf_eval(code){if(__p_JtSJ_rgf_eval_integrity){return eval(code)}}console[\"log\"](\"xabbbcx\"[\"replace\"](re,\"[$1]\"),tag`one${1}two${\"2\"}\\n`);"
+    },
+    {
+      "name": "19-dispatch-cff.js",
+      "code": "function __p_3dmJ(__p__flag=true){return __p__flag}var __p_hGBg_rgf_eval_integrity=__p_3dmJ();var __p_HquI_rgf=[__p_Govc_rgf_eval(\"function __p_R85M_embedded(){var[__p_HquI_rgf,__p_HPA2_args]=arguments;function __p_Tqbj_replacement(){var order=\\\"2|0|1\\\"[\\\"split\\\"](\\\"|\\\");var i=0;var out=[];while(true){switch(order[i++]){case\\\"0\\\":out[\\\"push\\\"](\\\"zero\\\");continue;case\\\"1\\\":out[\\\"push\\\"](\\\"one\\\");continue;case\\\"2\\\":out[\\\"push\\\"](\\\"two\\\");continue}break}console[\\\"log\\\"](out[\\\"join\\\"](\\\",\\\"))}return __p_Tqbj_replacement[\\\"apply\\\"](this,__p_HPA2_args)}__p_R85M_embedded;\")];function __p_Govc_rgf_eval(code){if(__p_hGBg_rgf_eval_integrity){return eval(code)}}(function(){return __p_HquI_rgf[0][\"apply\"](this,[__p_HquI_rgf,arguments])})();"
+    },
+    {
+      "name": "20-objects-json.js",
+      "code": "var data={[\"list\"]:[1,2,3],[\"nested\"]:{[\"k\"]:\"v\",\"with space\":true},[\"n\"]:null};var copy=JSON[\"parse\"](JSON[\"stringify\"](data));copy[\"list\"][\"push\"](4);var keys=Object[\"keys\"](copy)[\"sort\"]();console[\"log\"](keys[\"join\"](\",\"),copy[\"list\"][\"length\"],data[\"list\"][\"length\"],copy[\"nested\"][\"with space\"]);"
+    },
+    {
+      "name": "21-bitwise.js",
+      "code": "function __p_iP1I(__p__flag=true){return __p__flag}var __p_b11P_rgf_eval_integrity=__p_iP1I();var __p_CXS0_rgf=[__p_Yasw_rgf_eval(\"function __p_wy4s_embedded(){var[__p_CXS0_rgf,__p_dzsh_args]=arguments;function __p_PIUy_replacement(s){var h=2166136261;var i;for(i=0;i<s[\\\"length\\\"];i++){h^=s[\\\"charCodeAt\\\"](i);h=Math[\\\"imul\\\"](h,16777619)>>>0}return h}return __p_PIUy_replacement[\\\"apply\\\"](this,__p_dzsh_args)}__p_wy4s_embedded;\"),__p_Yasw_rgf_eval(\"function __p_XZTA_embedded(){var[__p_CXS0_rgf,__p_pe3z_args]=arguments;function __p_uySY_replacement(x){x^=x<<13;x^=x>>>17;x^=x<<5;return x>>>0}return __p_uySY_replacement[\\\"apply\\\"](this,__p_pe3z_args)}__p_XZTA_embedded;\")];function hash(){return __p_CXS0_rgf[0][\"apply\"](this,[__p_CXS0_rgf,arguments])}function xs(){return __p_CXS0_rgf[1][\"apply\"](this,[__p_CXS0_rgf,arguments])}function __p_Yasw_rgf_eval(code){if(__p_b11P_rgf_eval_integrity){return eval(code)}}console[\"log\"](hash(\"hello\"),xs(12345),255.9|0,-1>>>28,7.5&3);"
+    },
+    {
+      "name": "22-getter-table.js",
+      "code": "function __p_0VVj(__p__flag=true){return __p__flag}var __p_asIP_rgf_eval_integrity=__p_0VVj();var __p_iG3N_rgf=[__p_eEyl_rgf_eval(\"function __p_IIDH_embedded(){var[__p_iG3N_rgf,__p_qIWR_args]=arguments;function __p_cguS_replacement(){var n=0;var G={get[\\\"v\\\"](){return++n},[\\\"w\\\"]:1};console[\\\"log\\\"](G[\\\"v\\\"],G[\\\"v\\\"],G[\\\"w\\\"]);var H={[\\\"a\\\"]:1};Object[\\\"defineProperty\\\"](H,\\\"b\\\",{[\\\"get\\\"]:function(){return 42}});console[\\\"log\\\"](H[\\\"a\\\"],H[\\\"b\\\"])}return __p_cguS_replacement[\\\"apply\\\"](this,__p_qIWR_args)}__p_IIDH_embedded;\")];function __p_eEyl_rgf_eval(code){if(__p_asIP_rgf_eval_integrity){return eval(code)}}(function(){return __p_iG3N_rgf[0][\"apply\"](this,[__p_iG3N_rgf,arguments])})();"
+    },
+    {
+      "name": "23-tdz.js",
+      "code": "function __p_LZrT(__p__flag=true){return __p__flag}var __p_fWjS_rgf_eval_integrity=__p_LZrT();var __p_ShSf_rgf=[__p_XiYd_rgf_eval(\"function __p_4ywE_embedded(){var[__p_ShSf_rgf,__p_d8tF_args]=arguments;function __p_5y5i_replacement(){var r=[];try{r[\\\"push\\\"](early)}catch(e){r[\\\"push\\\"](e[\\\"name\\\"])}let early=\\\"late\\\";r[\\\"push\\\"](early);const c=3;r[\\\"push\\\"](c*2);console[\\\"log\\\"](r[\\\"join\\\"](\\\",\\\"))}return __p_5y5i_replacement[\\\"apply\\\"](this,__p_d8tF_args)}__p_4ywE_embedded;\")];function __p_XiYd_rgf_eval(code){if(__p_fWjS_rgf_eval_integrity){return eval(code)}}(function(){return __p_ShSf_rgf[0][\"apply\"](this,[__p_ShSf_rgf,arguments])})();"
+    },
+    {
+      "name": "24-nested-proxies.js",
+      "code": "function __p_iGim(__p__flag=true){return __p__flag}var __p_gMUO_rgf_eval_integrity=__p_iGim();var __p_lYub_rgf=[__p_L9Ie_rgf_eval(\"function __p_ujpt_embedded(){var[__p_lYub_rgf,__p_pVd2_args]=arguments;function __p_pfSB_replacement(){var A={[\\\"f\\\"]:function(x,y){return x(y)},[\\\"g\\\"]:function(x,y){return x!==y}};var B={[\\\"h\\\"]:function(p,q){return A[\\\"f\\\"](p,q)},[\\\"k\\\"]:function(p,q){return A[\\\"g\\\"](p,q)}};function sq(v){return v*v}console[\\\"log\\\"](B[\\\"h\\\"](sq,7),B[\\\"k\\\"](1,2),B[\\\"k\\\"](\\\"a\\\",\\\"a\\\"))}return __p_pfSB_replacement[\\\"apply\\\"](this,__p_pVd2_args)}__p_ujpt_embedded;\")];function __p_L9Ie_rgf_eval(code){if(__p_gMUO_rgf_eval_integrity){return eval(code)}}(function(){return __p_lYub_rgf[0][\"apply\"](this,[__p_lYub_rgf,arguments])})();"
+    },
+    {
+      "name": "25-self-memo.js",
+      "code": "function __p_bNGG(__p__flag=true){return __p__flag}var __p_nsdS_rgf_eval_integrity=__p_bNGG();var __p_1iWH_rgf=[__p_NLeU_rgf_eval(\"function __p_VHtV_embedded(){var[__p_1iWH_rgf,__p_xGZa_args]=arguments;function __p_HWAU_replacement(){function pool(){var arr=\\\"q;w;e;r\\\"[\\\"split\\\"](\\\";\\\");pool=function(){return arr};return pool()}function dec(i){return pool()[i-100]}(function(get,target){var a=get();while(a[0]!==target){a[\\\"push\\\"](a[\\\"shift\\\"]())}})(pool,\\\"e\\\");console[\\\"log\\\"](dec(100),dec(103),dec(101))}return __p_HWAU_replacement[\\\"apply\\\"](this,__p_xGZa_args)}__p_VHtV_embedded;\")];function __p_NLeU_rgf_eval(code){if(__p_nsdS_rgf_eval_integrity){return eval(code)}}(function(){return __p_1iWH_rgf[0][\"apply\"](this,[__p_1iWH_rgf,arguments])})();"
+    },
+    {
+      "name": "26-escape-pool.js",
+      "code": "function __p_Sxnh(__p__flag=true){return __p__flag}var __p_oo7t_rgf_eval_integrity=__p_Sxnh();var __p_gRRf_rgf=[__p_NvDN_rgf_eval(\"function __p_DrpD_embedded(){var[__p_gRRf_rgf,__p_bLYa_args]=arguments;function __p_PrxG_replacement(){function pool(){var arr=[\\\"m\\\",\\\"n\\\",\\\"o\\\"];pool=function(){return arr};return pool()}function dec(i){return pool()[i]}var first=dec(0);pool()[\\\"reverse\\\"]();console[\\\"log\\\"](first,dec(0),dec(2))}return __p_PrxG_replacement[\\\"apply\\\"](this,__p_bLYa_args)}__p_DrpD_embedded;\")];function __p_NvDN_rgf_eval(code){if(__p_oo7t_rgf_eval_integrity){return eval(code)}}(function(){return __p_gRRf_rgf[0][\"apply\"](this,[__p_gRRf_rgf,arguments])})();"
+    },
+    {
+      "name": "27-arguments-callee.js",
+      "code": "function __p_A7cf(__p__flag=true){return __p__flag}var __p_Pzhh_rgf_eval_integrity=__p_A7cf();var __p_JVzF_rgf=[__p_xv9W_rgf_eval(\"function __p_SOla_embedded(){var[__p_JVzF_rgf,__p_0IlK_args]=arguments;function __p_QzqM_replacement(a,b){b=3;return arguments[\\\"length\\\"]+\\\":\\\"+a}return __p_QzqM_replacement[\\\"apply\\\"](this,__p_0IlK_args)}__p_SOla_embedded;\")];function f(){return __p_JVzF_rgf[0][\"apply\"](this,[__p_JVzF_rgf,arguments])}var arrow=(a,b)=>{b=4;return a+b};function __p_xv9W_rgf_eval(code){if(__p_Pzhh_rgf_eval_integrity){return eval(code)}}console[\"log\"](f(1),f(1,2,3),arrow(1));"
+    },
+    {
+      "name": "28-conditional-stmts.js",
+      "code": "function __p_uVUW(__p__flag=true){return __p__flag}var __p_n2la_rgf_eval_integrity=__p_uVUW();var __p_KMrz_rgf=[__p_V36y_rgf_eval(\"function __p_iTKM_embedded(){var[__p_KMrz_rgf,__p_7jI0_args]=arguments;function __p_g5fI_replacement(){var out=[];var x=0;x>0?out[\\\"push\\\"](\\\"pos\\\"):out[\\\"push\\\"](\\\"nonpos\\\");x||out[\\\"push\\\"](\\\"falsy\\\");x&&out[\\\"push\\\"](\\\"never\\\");var y=x?1:(out[\\\"push\\\"](\\\"side\\\"),2);console[\\\"log\\\"](out[\\\"join\\\"](\\\",\\\"),y)}return __p_g5fI_replacement[\\\"apply\\\"](this,__p_7jI0_args)}__p_iTKM_embedded;\")];function __p_V36y_rgf_eval(code){if(__p_n2la_rgf_eval_integrity){return eval(code)}}(function(){return __p_KMrz_rgf[0][\"apply\"](this,[__p_KMrz_rgf,arguments])})();"
+    },
+    {
+      "name": "29-greet.js",
+      "code": "function __p_jTtk(__p__flag=true){return __p__flag}var __p_YTP3_rgf_eval_integrity=__p_jTtk();var __p_QuKr_rgf=[__p_JO5c_rgf_eval(\"function __p_gpqp_embedded(){var[__p_QuKr_rgf,__p_eOoR_args]=arguments;function __p_E10i_replacement(name){var output=\\\"Hello \\\"+name+\\\"!\\\";console[\\\"log\\\"](output)}return __p_E10i_replacement[\\\"apply\\\"](this,__p_eOoR_args)}__p_gpqp_embedded;\")];function greet(){return __p_QuKr_rgf[0][\"apply\"](this,[__p_QuKr_rgf,arguments])}function __p_JO5c_rgf_eval(code){if(__p_YTP3_rgf_eval_integrity){return eval(code)}}greet(\"Internet User\");"
+    }
+  ],
+  "skipped": [
+    {
+      "name": "16-iife-params.js",
+      "reason": "js-confuser output does not behave like the original"
+    }
+  ]
+}

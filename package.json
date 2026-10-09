@@ -1,0 +1,69 @@
+{
+  "name": "js-defuser",
+  "version": "0.1.0",
+  "description": "Sound, fully automatic JavaScript deobfuscator: recovers js-confuser (every transform at max settings, locks included) and javascript-obfuscator output back to readable source without executing it.",
+  "license": "MIT",
+  "author": "Arsylk",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Arsylk/js-defuser.git"
+  },
+  "homepage": "https://github.com/Arsylk/js-defuser#readme",
+  "bugs": "https://github.com/Arsylk/js-defuser/issues",
+  "keywords": [
+    "deobfuscator",
+    "deobfuscation",
+    "js-confuser",
+    "javascript-obfuscator",
+    "obfuscator.io",
+    "control-flow-flattening",
+    "babel",
+    "reverse-engineering",
+    "malware-analysis"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "js-defuser": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node -e \"require('node:fs').chmodSync('dist/cli.js', 0o755)\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run tests/deobfuscator.test.ts tests/logger.test.ts tests/pass-catalog.test.ts",
+    "test:gates": "tsc -p tsconfig.build.json && vitest run tests/gates.test.ts",
+    "test:all": "tsc -p tsconfig.build.json && vitest run",
+    "deobfuscate": "node dist/cli.js",
+    "prepublishOnly": "npm run typecheck && npm run build"
+  },
+  "dependencies": {
+    "@babel/core": "^7.29.7",
+    "@babel/generator": "^7.29.7",
+    "@babel/parser": "^7.29.7",
+    "@babel/preset-env": "^7.29.7",
+    "@babel/traverse": "^7.29.7",
+    "@babel/types": "^7.29.7"
+  },
+  "devDependencies": {
+    "@types/babel__generator": "^7.27.0",
+    "@types/babel__traverse": "^7.28.0",
+    "@types/node": "^20.19.43",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

@@ -1,0 +1,127 @@
+{
+  "generator": "js-confuser 2.1.3",
+  "options": {
+    "target": "node",
+    "compact": true,
+    "movedDeclarations": true
+  },
+  "cases": [
+    {
+      "name": "01-hoisted-closure.js",
+      "code": "(function(){var log=[],alias;function early(){return typeof alias+\":\"+String(alias)}log[\"push\"](early());alias=undefined;alias=Math[\"max\"];log[\"push\"](early(),alias(3,9));console[\"log\"](log[\"join\"](\"|\"))})();"
+    },
+    {
+      "name": "02-param-observed.js",
+      "code": "function f(a,b,c){if(b===undefined){b=10}c=a+b;return c}function g(a,b,r){r=b;b=5;return[r,b,a]}function h(a,b){b=arguments[\"length\"];return a+b}function k(x,y){y=2;return arguments[1]}console[\"log\"](f(1),f(1,2),JSON[\"stringify\"](g(1,7)),h(1,99),k(1,9));"
+    },
+    {
+      "name": "03-table-mutation.js",
+      "code": "(function(){var T={[\"add\"]:function(a,b){return a+b},[\"k\"]:\"key\"},U,V,W;U={[\"mul\"]:function(a,b){return a*b},[\"v\"]:1};U[\"v\"]=2;V={[\"f\"]:function(){return this[\"n\"]},[\"n\"]:7};W={[\"z\"]:3};function leak(o){o[\"z\"]=99}leak(W);console[\"log\"](T[\"add\"](2,3),T[\"k\"],U[\"mul\"](U[\"v\"],5),V[\"f\"](),W[\"z\"])})();"
+    },
+    {
+      "name": "04-eval-order.js",
+      "code": "(function(){var trace=[],P,r1,r2,cnt,obj,r3;function t(x){trace[\"push\"](x);return x}P={[\"sub\"]:function(a,b){return b-a},[\"sel\"]:function(a,b){return a||b}};r1=P[\"sub\"](t(1),t(5));r2=P[\"sel\"](t(0),t(4));cnt=0;obj={get[\"v\"](){cnt++;return cnt}};r3=P[\"sub\"](obj[\"v\"],obj[\"v\"]);console[\"log\"](r1,r2,r3,trace[\"join\"](\",\"))})();"
+    },
+    {
+      "name": "05-alias-loop.js",
+      "code": "(function(){var out=[],fns,i,g,j;fns=[function(x){return x+1},function(x){return x*2}];for(i=0;i<2;i++){var f;f=fns[i];out[\"push\"](f(10))}g=undefined;for(j=0;j<3;j++){if(j===1){g=String}}out[\"push\"](typeof g);console[\"log\"](out[\"join\"](\",\"))})();"
+    },
+    {
+      "name": "06-strings.js",
+      "code": "var s=\"alpha|beta|gamma\"[\"split\"](\"|\"),t2,parts;t2=\"Hello\"[\"charCodeAt\"](1)+\"x\"[\"repeat\"](3)+\"abc\"[\"toUpperCase\"]()+\"a-b\"[\"replace\"](\"-\",\"+\");parts=[\"x\",\"y\"][\"join\"](\"/\")+\"lit\"[\"length\"];console[\"log\"](s[\"length\"],s[2],t2,parts,\"tpl\"+(1+1),\"AB\");"
+    },
+    {
+      "name": "07-switch-labels.js",
+      "code": "(function(){var out=[],i;yxmNUZ:for(i=0;i<4;i++){switch(i){case 0:out[\"push\"](\"zero\");case 1:out[\"push\"](\"one-ish\");break;case 2:continue yxmNUZ;default:out[\"push\"](\"d\"+i);break yxmNUZ}out[\"push\"](\"after\"+i)}console[\"log\"](out[\"join\"](\",\"))})();"
+    },
+    {
+      "name": "08-try-finally.js",
+      "code": "function f(x,r,q){r=undefined;q=undefined;try{if(x){throw new Error(\"e\"+x)}r=\"ok\"}catch(e){r=e[\"message\"]}finally{q=\"fin\"}return r+q}function g(a){a=undefined;try{return a=1}finally{a=2}}console[\"log\"](f(0),f(3),g());"
+    },
+    {
+      "name": "09-generators-async.js",
+      "code": "function*gen(n,i){i=undefined;for(i=0;i<n;i++){yield i*i}}async function af(x,y){y=undefined;y=await Promise[\"resolve\"](x+1);return y*2}console[\"log\"]([...gen(4)][\"join\"](\",\"));af(4)[\"then\"](function(v){console[\"log\"](\"async\",v)});"
+    },
+    {
+      "name": "10-eval.js",
+      "code": "(function(){var hidden=5,alias;alias=Math[\"min\"];console[\"log\"](eval(\"hidden + 1\"),alias(4,2))})();"
+    },
+    {
+      "name": "11-this-binding.js",
+      "code": "var obj={[\"name\"]:\"o\",[\"get\"]:function(){return this&&this[\"name\"]}},getter,m;getter=obj[\"get\"];m={[\"f\"]:obj[\"get\"]};console[\"log\"]((0,obj[\"get\"])()===undefined||(0,obj[\"get\"])()===\"\",obj[\"get\"](),m[\"f\"][\"call\"]({[\"name\"]:\"z\"}));"
+    },
+    {
+      "name": "12-valueof-order.js",
+      "code": "(function(){var seq=[],a,b,ops,r;a={[\"valueOf\"]:function(){seq[\"push\"](\"a\");return 1}};b={[\"valueOf\"]:function(){seq[\"push\"](\"b\");return 2}};ops={[\"plus\"]:function(x,y){return x+y},[\"rev\"]:function(x,y){return y-x}};r=ops[\"plus\"](a,b)+ops[\"rev\"](a,b);console[\"log\"](r,seq[\"join\"](\"\"))})();"
+    },
+    {
+      "name": "13-sequences.js",
+      "code": "(function(){var a,b,c,log;b=undefined;c=undefined;log=[];for(a=0,b=10,log[\"push\"](\"init\");a<3;log[\"push\"](\"upd\"+a),a++){log[\"push\"](\"body\"+a)}c=(log[\"push\"](\"x\"),log[\"push\"](\"y\"),log[\"length\"]);if(b=2,b>1){log[\"push\"](\"if\")}console[\"log\"](c,b,log[\"join\"](\",\"))})();"
+    },
+    {
+      "name": "14-closures-counter.js",
+      "code": "var c1;function makeCounter(count,step){count=undefined;step=undefined;count=0;step=1;return{[\"inc\"]:function(){count+=step;return count},[\"set\"]:function(s){step=s}}}c1=makeCounter();c1[\"inc\"]();c1[\"set\"](5);c1[\"inc\"]();console[\"log\"](c1[\"inc\"]());"
+    },
+    {
+      "name": "15-decoder-stateful.js",
+      "code": "(function(){var pool=[\"a\",\"b\",\"c\",\"d\"];function rot(i){pool[\"push\"](pool[\"shift\"]());return pool[i]}function pure(i){return[\"x\",\"y\",\"z\"][i]}console[\"log\"](rot(0),rot(0),rot(1),pure(1),pure(2))})();"
+    },
+    {
+      "name": "16-iife-params.js",
+      "code": "var r=function(a,b,c){var out=[typeof b,typeof c];b=a*2;return out[\"concat\"]([a,b])[\"join\"](\",\")}(3),r2;r2=function f(n,acc){return n<=0?acc:f(n-1,(acc||0)+n)}(4);console[\"log\"](r,r2);"
+    },
+    {
+      "name": "17-class-getters.js",
+      "code": "var p;class P{constructor(x){this[\"x\"]=x}get[\"double\"](){return this[\"x\"]*2}static[\"make\"](v){return new P(v)}set[\"val\"](v){this[\"x\"]=v}}p=P[\"make\"](4);p[\"val\"]=6;console[\"log\"](p[\"double\"],P[\"name\"]);"
+    },
+    {
+      "name": "18-regex-tagged.js",
+      "code": "var re;function tag(strs,...vals){return strs[\"raw\"][\"join\"](\"|\")+vals[\"join\"](\",\")}re=new RegExp(\"a(b+)c\",\"g\");console[\"log\"](\"xabbbcx\"[\"replace\"](re,\"[$1]\"),tag`one${1}two${\"2\"}\\n`);"
+    },
+    {
+      "name": "19-dispatch-cff.js",
+      "code": "(function(){var order=\"2|0|1\"[\"split\"](\"|\"),i,out;i=0;out=[];while(true){switch(order[i++]){case\"0\":out[\"push\"](\"zero\");continue;case\"1\":out[\"push\"](\"one\");continue;case\"2\":out[\"push\"](\"two\");continue}break}console[\"log\"](out[\"join\"](\",\"))})();"
+    },
+    {
+      "name": "20-objects-json.js",
+      "code": "var data={[\"list\"]:[1,2,3],[\"nested\"]:{[\"k\"]:\"v\",\"with space\":true},[\"n\"]:null},copy,keys;copy=JSON[\"parse\"](JSON[\"stringify\"](data));copy[\"list\"][\"push\"](4);keys=Object[\"keys\"](copy)[\"sort\"]();console[\"log\"](keys[\"join\"](\",\"),copy[\"list\"][\"length\"],data[\"list\"][\"length\"],copy[\"nested\"][\"with space\"]);"
+    },
+    {
+      "name": "21-bitwise.js",
+      "code": "function hash(s,h=2166136261,i){i=undefined;for(i=0;i<s[\"length\"];i++){h^=s[\"charCodeAt\"](i);h=Math[\"imul\"](h,16777619)>>>0}return h}function xs(x){x^=x<<13;x^=x>>>17;x^=x<<5;return x>>>0}console[\"log\"](hash(\"hello\"),xs(12345),255.9|0,-1>>>28,7.5&3);"
+    },
+    {
+      "name": "22-getter-table.js",
+      "code": "(function(){var n=0,G,H;G={get[\"v\"](){return++n},[\"w\"]:1};console[\"log\"](G[\"v\"],G[\"v\"],G[\"w\"]);H={[\"a\"]:1};Object[\"defineProperty\"](H,\"b\",{[\"get\"]:function(){return 42}});console[\"log\"](H[\"a\"],H[\"b\"])})();"
+    },
+    {
+      "name": "23-tdz.js",
+      "code": "(function(){var r=[];try{r[\"push\"](early)}catch(e){r[\"push\"](e[\"name\"])}let early=\"late\";r[\"push\"](early);const c=3;r[\"push\"](c*2);console[\"log\"](r[\"join\"](\",\"))})();"
+    },
+    {
+      "name": "24-nested-proxies.js",
+      "code": "(function(){var A={[\"f\"]:function(x,y){return x(y)},[\"g\"]:function(x,y){return x!==y}},B;B={[\"h\"]:function(p,q){return A[\"f\"](p,q)},[\"k\"]:function(p,q){return A[\"g\"](p,q)}};function sq(v){return v*v}console[\"log\"](B[\"h\"](sq,7),B[\"k\"](1,2),B[\"k\"](\"a\",\"a\"))})();"
+    },
+    {
+      "name": "25-self-memo.js",
+      "code": "(function(){function pool(){var arr=\"q;w;e;r\"[\"split\"](\";\");pool=function(){return arr};return pool()}function dec(i){return pool()[i-100]}(function(get,target){var a=get();while(a[0]!==target){a[\"push\"](a[\"shift\"]())}})(pool,\"e\");console[\"log\"](dec(100),dec(103),dec(101))})();"
+    },
+    {
+      "name": "26-escape-pool.js",
+      "code": "(function(){var first;function pool(arr=[\"m\",\"n\",\"o\"]){pool=function(){return arr};return pool()}function dec(i){return pool()[i]}first=dec(0);pool()[\"reverse\"]();console[\"log\"](first,dec(0),dec(2))})();"
+    },
+    {
+      "name": "27-arguments-callee.js",
+      "code": "var arrow;function f(a,b){b=3;return arguments[\"length\"]+\":\"+a}arrow=(a,b)=>{b=4;return a+b};console[\"log\"](f(1),f(1,2,3),arrow(1));"
+    },
+    {
+      "name": "28-conditional-stmts.js",
+      "code": "(function(){var out=[],x,y;x=0;x>0?out[\"push\"](\"pos\"):out[\"push\"](\"nonpos\");x||out[\"push\"](\"falsy\");x&&out[\"push\"](\"never\");y=x?1:(out[\"push\"](\"side\"),2);console[\"log\"](out[\"join\"](\",\"),y)})();"
+    },
+    {
+      "name": "29-greet.js",
+      "code": "function greet(name,output){output=\"Hello \"+name+\"!\";console[\"log\"](output)}greet(\"Internet User\");"
+    }
+  ],
+  "skipped": []
+}
