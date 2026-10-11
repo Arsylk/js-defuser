@@ -80,9 +80,8 @@ describe('obfuscated corpus', () => {
         // javascript-obfuscator 5 at its strongest settings comes back as the
         // program: the string array, storage objects, self-defending and
         // debug protection all gone (the obfuscator's `_0x…` names stay —
-        // renaming is opt-in — hence the slack). 10-eval keeps a direct eval
-        // whose source is itself an encrypted string.
-        if (config.startsWith('jso5-') && name !== '10-eval.js') {
+        // renaming is opt-in — hence the slack).
+        if (config.startsWith('jso5-')) {
           expect(result.deobfuscatedCode.length).toBeLessThan(3 * source.length);
           expect(result.deobfuscatedCode).not.toMatch(/setInterval|debugger|\(\(\(\.\+\)\+\)\+\)\+\$/);
         }
@@ -768,6 +767,28 @@ describe('structural primitives', () => {
     expect(await execute(source)).toEqual(['-1 1']);
     const result = await recover(source, DEFAULT_ENABLED_PASSES.filter((p) => p !== 'closed-function-eval'));
     expect(await execute(result.deobfuscatedCode)).toEqual(['-1 1']);
+  });
+
+  it('inlines an eval of declarations and an expression as an arrow call', async () => {
+    // javascript-obfuscator rewrites an eval'd string into its own wrappers
+    // plus the expression; once that is an arrow call, nothing dynamic is left.
+    const source = `(function () {
+      var h = 5;
+      console.log(eval("function f(a) { return a + 1; } f(h)"), this === undefined);
+    }).call(undefined);`;
+    expect(await execute(source)).toEqual(['6 false']);
+    const result = await recover(source);
+    expect(await execute(result.deobfuscatedCode)).toEqual(['6 false']);
+    expect(result.deobfuscatedCode).not.toMatch(/eval/);
+    // A sloppy eval's declaration lands in the enclosing function, where
+    // `typeof g` can see it: that eval stays.
+    const leaks = `(function () {
+      var r = eval("function g() { return 2; } g()");
+      console.log(r, typeof g);
+    })();`;
+    expect(await execute(leaks)).toEqual(['2 function']);
+    const kept = await recover(leaks);
+    expect(await execute(kept.deobfuscatedCode)).toEqual(['2 function']);
   });
 
   it('bounds a table member function by its call sites and restores its moved declaration', async () => {

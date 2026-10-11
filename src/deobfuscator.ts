@@ -2097,12 +2097,51 @@ function passFunctionConstructor(ast: t.File, log: Logger): number {
  * When the argument is a literal that parses to exactly one expression, that
  * expression can replace the call verbatim — a direct `eval` evaluates in the
  * caller's scope with the caller's `this`, and the completion value of a single
- * expression statement is what it returns. Anything else (declarations, several
- * statements) is left alone, since it would publish bindings of its own.
+ * expression statement is what it returns.
+ *
+ * Source that declares functions and then ends in an expression (how
+ * javascript-obfuscator rewrites an eval'd string: its own wrapper functions,
+ * then the renamed expression) becomes `(() => { function F() {…} return E; })()`.
+ * An arrow function sees the caller's scope chain, `this`, `arguments`,
+ * `new.target` and strictness exactly as eval code does; its declarations are
+ * instantiated on entry as the eval's are, and `return E` is the completion
+ * value. The one difference — a sloppy eval's function declarations land in
+ * the enclosing function's variables — is unobservable when no other name in
+ * that function (nor another eval/with in it) can reach them. Anything else
+ * (`var`, several expressions, top-level code) is left alone.
  */
 function passEvalLiteral(ast: t.File, log: Logger): number {
   let n = 0;
   let notExpression = 0;
+  /** Declarations + one trailing expression, wrapped as an arrow call; null when that is not unobservable. */
+  const wrapDeclarations = (p: NodePath<t.CallExpression>, body: t.Statement[], directives: t.Directive[]): t.Expression | null => {
+    const last = body[body.length - 1];
+    const decls = t.isExpressionStatement(last) ? body.slice(0, -1) : body;
+    if (decls.length === 0 || !decls.every((st) => t.isFunctionDeclaration(st) && st.id)) return null;
+    const names = decls.map((st) => (st as t.FunctionDeclaration).id!.name);
+    if (new Set(names).size !== names.length) return null;
+    if (body.some((st) => hasDynamicScope(st))) return null;
+    // the variable environment the declarations would land in
+    const owner = p.getFunctionParent();
+    if (!owner) return null; // top-level eval code would declare globals
+    if (names.some((nm) => p.scope.hasBinding(nm, { noGlobals: true }))) return null;
+    let clash = false;
+    let otherDynamic = false;
+    owner.traverse({
+      Identifier(ip) {
+        if (names.includes(ip.node.name)) clash = true;
+      },
+      CallExpression(cp) {
+        if (cp.node !== p.node && t.isIdentifier(cp.node.callee, { name: 'eval' })) otherDynamic = true;
+      },
+      WithStatement() {
+        otherDynamic = true;
+      },
+    });
+    if (clash || otherDynamic) return null;
+    const ret = t.isExpressionStatement(last) ? [t.returnStatement(last.expression)] : [];
+    return t.callExpression(t.arrowFunctionExpression([], t.blockStatement([...decls, ...ret], directives)), []);
+  };
   traverse(ast, {
     CallExpression(p) {
       if (!t.isIdentifier(p.node.callee, { name: 'eval' })) return;
@@ -2112,14 +2151,23 @@ function passEvalLiteral(ast: t.File, log: Logger): number {
       if (!t.isStringLiteral(arg)) return;
 
       let body: t.Statement[];
+      let directives: t.Directive[];
       try {
-        body = parser.parse(arg.value, { sourceType: 'script' }).program.body;
+        const parsed = parser.parse(arg.value, { sourceType: 'script' }).program;
+        body = parsed.body;
+        directives = parsed.directives;
         noteSourceText(arg.value);
       } catch {
         return;
       }
-      if (body.length !== 1 || !t.isExpressionStatement(body[0])) {
-        notExpression++;
+      if (body.length !== 1 || !t.isExpressionStatement(body[0]) || directives.length) {
+        const wrapped = wrapDeclarations(p, body, directives);
+        if (!wrapped) {
+          notExpression++;
+          return;
+        }
+        p.replaceWith(wrapped);
+        n++;
         return;
       }
       const expr = body[0].expression;
@@ -11718,6 +11766,25 @@ function passIifeFlatten(ast: t.File, log: Logger): number {
   // so the call can create the function itself, as an IIFE the step below
   // then flattens.
   let localised = 0;
+  // `(() => E)()` and `(() => { return E; })()` with no parameters: an arrow
+  // shares its caller's `this`, `arguments` and scope, and declares nothing
+  // here, so the call is E evaluated in place (B03d leaves these behind once
+  // the functions an eval declared are gone).
+  program.traverse({
+    CallExpression(p) {
+      const f = p.node.callee;
+      if (!t.isArrowFunctionExpression(f) || f.params.length || f.async || p.node.arguments.length) return;
+      let e: t.Expression | null = null;
+      if (!t.isBlockStatement(f.body)) e = f.body;
+      else if (!f.body.directives.length) {
+        const stmts = f.body.body.filter((x) => !t.isEmptyStatement(x));
+        if (stmts.length === 1 && t.isReturnStatement(stmts[0])) e = stmts[0].argument ?? t.unaryExpression('void', t.numericLiteral(0));
+      }
+      if (!e) return;
+      p.replaceWith(e);
+      localised++;
+    },
+  });
   // `(function () { …; return E; })();` — the call's value is thrown away, so
   // the last statement may as well just evaluate E.
   program.traverse({

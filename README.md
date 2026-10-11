@@ -130,7 +130,7 @@ split strings, unicode escapes, mangled and renamed globals:
 
 | corpus (29 semantics fixtures each) | result |
 | --- | --- |
-| 5.9 `high-obfuscation` preset | 28/29 — the 29th keeps a direct `eval` whose source is itself an encrypted string |
+| 5.9 `high-obfuscation` preset | 29/29 |
 | 5.9 high preset with every other option turned up (rc4 + base64, calls transform, unicode escapes, mangled names, `renameGlobals`) | 27/27 |
 
 Everything else that is common: `eval`/`Function` wrappers, proxy functions, opaque
