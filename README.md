@@ -122,13 +122,28 @@ state machines, dispatcher tables, scope frames, string pools, global lookups an
 dead-code templates are all gone. (Cases the obfuscator itself miscompiles are
 listed in the fixtures as `skipped`.)
 
-**javascript-obfuscator 4.2.2**: string arrays with rotation and RC4/base64 decoders,
-control-flow flattening, dead code injection, self-defending, debug protection,
-transformed object keys, numbers-to-expressions, split strings, unicode escapes.
+**javascript-obfuscator** (obfuscator.io) **4.2.2 and 5.9**: string arrays with rotation,
+index shift and RC4/base64 decoders, variable and function wrappers (chained), calls
+transform, control-flow flattening and its storage objects, dead code injection,
+self-defending, debug protection, transformed object keys, numbers-to-expressions,
+split strings, unicode escapes, mangled and renamed globals:
 
-Everything else that is common: `eval`/`Function` wrappers, packers, proxy functions,
-opaque predicates, bracket-notation members, hex/unicode/`fromCharCode`/`atob` strings,
+| corpus (29 semantics fixtures each) | result |
+| --- | --- |
+| 5.9 `high-obfuscation` preset | 28/29 — the 29th keeps a direct `eval` whose source is itself an encrypted string |
+| 5.9 high preset with every other option turned up (rc4 + base64, calls transform, unicode escapes, mangled names, `renameGlobals`) | 27/27 |
+
+Everything else that is common: `eval`/`Function` wrappers, proxy functions, opaque
+predicates, bracket-notation members, hex/unicode/`fromCharCode`/`atob` strings,
 constant folding, sequence expressions, dead stores and temporaries.
+
+**Not (yet) recovered**, though the output still behaves like the input: bytecode-VM
+obfuscators (Obscura, MeowShield's JSVMP levels), JSFuck, and Dean Edwards'
+`eval(function(p,a,c,k,e,d){…})` packer. When the engine cannot settle a self-check
+that reads the program's own text, it keeps the output on one line rather than risk
+changing what the check sees. One known exception: MeowShield's self-defending VM level
+verifies its own text from inside the bytecode, where the engine cannot see the check,
+and rejects any reprint at all.
 
 ## How it works — and what "sound" means here
 

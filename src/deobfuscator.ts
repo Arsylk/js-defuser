@@ -434,16 +434,48 @@ function genCode(ast: t.File): string {
  *   • integrity locks — the sensitivity regexp of the text hash: their answer
  *     depends on the function's exact text, which the recovery has changed.
  */
-function unsettledSelfChecks(ast: t.File): { newline: number; integrity: number } {
+function unsettledSelfChecks(ast: t.File): { newline: number; integrity: number; backtracking: number; hidden: number; textReads: number } {
   let newline = 0;
+  let textReads = 0;
+  // names of the program's functions: a read of one's text (`f.toString()`,
+  // `String(f)`, `f + ""`) sees whatever layout the output prints
+  const fnNames = new Set<string>();
+  t.traverseFast(ast.program, (n) => {
+    if (t.isFunctionDeclaration(n) && n.id) fnNames.add(n.id.name);
+    if (t.isVariableDeclarator(n) && t.isIdentifier(n.id) && (t.isFunctionExpression(n.init) || t.isArrowFunctionExpression(n.init))) fnNames.add(n.id.name);
+  });
+  const isFn = (x: t.Node) => t.isFunctionExpression(x) || t.isArrowFunctionExpression(x) || (t.isIdentifier(x) && fnNames.has(x.name));
   let integrity = 0;
+  let backtracking = 0;
+  let hidden = 0;
   const SENSITIVITY = ' |\\n|;|,|\\{|\\}|\\(|\\)|\\.|\\[|\\]';
+  // javascript-obfuscator's selfDefending regexps: instant on one-line text,
+  // catastrophic backtracking once the function text spans lines
+  const BACKTRACKING = new Set(['(((.+)+)+)+$', '^([^ ]+( +[^ ]+)+)+[^ ]}']);
   t.traverseFast(ast.program, (n) => {
     if (t.isNewExpression(n) && n.arguments.length === 1 && t.isStringLiteral(n.arguments[0], { value: '\n' })) newline++;
     if (t.isRegExpLiteral(n) && n.pattern === '\\n') newline++;
     if (t.isStringLiteral(n, { value: SENSITIVITY }) || (t.isRegExpLiteral(n) && n.pattern === SENSITIVITY)) integrity++;
+    if ((t.isStringLiteral(n) && BACKTRACKING.has(n.value)) || (t.isRegExpLiteral(n) && BACKTRACKING.has(n.pattern))) backtracking++;
+    // `o[DEC(…)](…)` / `o[POOL[i]](…)`: a method the passes could not name —
+    // undecoded string machinery, behind which `toString` / `search` on a
+    // function's own text hide as easily as anything else
+    if (
+      t.isCallExpression(n) &&
+      t.isMemberExpression(n.callee) &&
+      n.callee.computed &&
+      (t.isCallExpression(n.callee.property) || (t.isMemberExpression(n.callee.property) && n.callee.property.computed))
+    )
+      hidden++;
+    if (t.isCallExpression(n)) {
+      const c = n.callee;
+      if (t.isMemberExpression(c) && staticMemberKey(c) === 'toString' && n.arguments.length === 0 && isFn(c.object)) textReads++;
+      else if (t.isIdentifier(c, { name: 'String' }) && n.arguments.length === 1 && isFn(n.arguments[0])) textReads++;
+      else if (t.isMemberExpression(c) && ['call', 'apply'].includes(staticMemberKey(c) ?? '') && t.isMemberExpression(c.object) && staticMemberKey(c.object) === 'toString' && n.arguments.some((a) => isFn(a))) textReads++;
+    }
+    if (t.isBinaryExpression(n, { operator: '+' }) && ((isFn(n.left) && t.isStringLiteral(n.right)) || (isFn(n.right) && t.isStringLiteral(n.left)))) textReads++;
   });
-  return { newline, integrity };
+  return { newline, integrity, backtracking, hidden, textReads };
 }
 
 /**
@@ -8220,12 +8252,359 @@ function passSelfDefending(ast: t.File, log: Logger): number {
     },
   });
   n += removeCallControllerWrappers(ast);
+  n += removeDebugGuards(ast);
   log.pass('b14', 'self-defending', n);
   return n;
 }
 
+// ── debugger traps ───────────────────────────────────────────────────────────
+//
+// javascript-obfuscator's debugProtection: a guard function whose only effects
+// are `Function("debugger")` traps (a pause while devtools are open), an
+// endless recursion it catches itself, and `Function("while (true) {}")` for
+// a tampered caller; a timer that keeps calling it; and a call-controller
+// check in every function that inspects the guard's text and runs it (or
+// hangs). None of it produces a value the program uses.
+
+/** Sources the traps compile: a pause, or a loop that never ends. */
+const TRAP_SOURCES = new Set(['debugger', 'while(true){}', 'for(;;){}']);
+/** Sources whose function returns the global object when called plainly. */
+const GLOBAL_THIS_SOURCES = new Set(['returnthis', 'return(function(){}.constructor("returnthis")())', 'return(function(){}.constructor("returnthis")())']);
+
+/** `Function` itself, or `<function literal>.constructor` (the same constructor, with builtins intact). */
+function isFunctionConstructor(node: t.Node, scope: NodePath['scope']): boolean {
+  if (t.isIdentifier(node, { name: 'Function' })) return !scope.getBinding('Function');
+  return (
+    t.isMemberExpression(node) &&
+    staticMemberKey(node) === 'constructor' &&
+    (t.isFunctionExpression(node.object) || t.isArrowFunctionExpression(node.object))
+  );
+}
+
+/** The whitespace-free source of `Function("…")` / `f.constructor("…")`, else null. */
+function functionMadeFrom(node: t.Node, scope: NodePath['scope']): string | null {
+  if (!t.isCallExpression(node) && !t.isNewExpression(node)) return null;
+  if (node.arguments.length !== 1 || !t.isStringLiteral(node.arguments[0])) return null;
+  if (!isFunctionConstructor(node.callee, scope)) return null;
+  return node.arguments[0].value.replace(/\s+/g, '').replace(/;+$/, '').replace(/;\)/g, ')').replace(/'/g, '"');
+}
+
+/**
+ * The global object, whatever the surrounding code: an unshadowed global
+ * name, or a plain call of a function the Function constructor made from
+ * `return this` (such a function is sloppy and global-scoped, so `this` is
+ * the global object).
+ */
+function isGlobalObjectExpr(node: t.Node, scope: NodePath['scope']): boolean {
+  if (t.isIdentifier(node) && GLOBAL_OBJECT_NAMES.has(node.name)) return !scope.getBinding(node.name);
+  if (t.isCallExpression(node) && node.arguments.length === 0) {
+    const src = functionMadeFrom(node.callee, scope);
+    return src !== null && GLOBAL_THIS_SOURCES.has(src);
+  }
+  return false;
+}
+
+/**
+ * Functions every possible effect of which is a debugger trap: they compute
+ * on literals, their own locals and the text of functions (`f + ""`), call
+ * one another, run `Function("debugger")` / `Function("while (true) {}")`,
+ * test strings with RegExps built from literals, and catch what they throw.
+ * Greatest fixpoint over every function in the program. A function literal
+ * that only serves as `function () {}.constructor` is never run, so its body
+ * does not matter.
+ */
+function debugOnlyFunctions(program: NodePath<t.Program>): Set<t.Node> {
+  const fns = new Map<t.Node, NodePath<t.Function>>();
+  program.traverse({
+    Function(p) {
+      if (!p.node.async && !p.node.generator && !p.isArrowFunctionExpression()) fns.set(p.node, p);
+    },
+  });
+  const ok = new Set(fns.keys());
+  const within = (b: Binding, p: NodePath): boolean => b.scope.path === p || pathWithin(b.scope.path, p.node);
+  const okFunctionBinding = (b: Binding | undefined): boolean =>
+    !!b && b.constantViolations.length === 0 && t.isFunctionDeclaration(b.path.node) && ok.has(b.path.node);
+  /** A local whose every value is a RegExp built from literals. */
+  const regexpLocal = (b: Binding | undefined, p: NodePath): boolean => {
+    if (!b || !within(b, p) || b.constantViolations.length) return false;
+    const init = b.path.isVariableDeclarator() ? b.path.node.init : null;
+    if (t.isRegExpLiteral(init)) return true;
+    if (!t.isNewExpression(init) || !t.isIdentifier(init.callee, { name: 'RegExp' }) || b.scope.getBinding('RegExp')) return false;
+    if (!init.arguments.length || init.arguments.length > 2 || !init.arguments.every((a) => t.isStringLiteral(a))) return false;
+    try {
+      const [src, flags] = (init.arguments as t.StringLiteral[]).map((a) => a.value);
+      new RegExp(src, flags);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const exprOk = (e: t.Node | null | undefined, p: NodePath<t.Function>, scope: NodePath['scope']): boolean => {
+    if (!e) return true;
+    if (t.isStringLiteral(e) || t.isNumericLiteral(e) || t.isBooleanLiteral(e) || t.isNullLiteral(e)) return true;
+    if (t.isIdentifier(e)) {
+      if (e.name === 'undefined' && !scope.getBinding('undefined')) return true;
+      const b = scope.getBinding(e.name);
+      return !!b && (within(b, p) || okFunctionBinding(b));
+    }
+    if (t.isFunctionExpression(e)) return ok.has(e);
+    if (t.isUnaryExpression(e)) return ['typeof', '!', '-', '+', '~', 'void'].includes(e.operator) && exprOk(e.argument, p, scope);
+    if (t.isBinaryExpression(e)) return !['in', 'instanceof'].includes(e.operator) && exprOk(e.left, p, scope) && exprOk(e.right, p, scope);
+    if (t.isLogicalExpression(e)) return exprOk(e.left, p, scope) && exprOk(e.right, p, scope);
+    if (t.isConditionalExpression(e)) return exprOk(e.test, p, scope) && exprOk(e.consequent, p, scope) && exprOk(e.alternate, p, scope);
+    if (t.isSequenceExpression(e)) return e.expressions.every((x) => exprOk(x, p, scope));
+    if (t.isUpdateExpression(e) || t.isAssignmentExpression(e)) {
+      const target = t.isUpdateExpression(e) ? e.argument : e.left;
+      if (!t.isIdentifier(target)) return false;
+      const b = scope.getBinding(target.name);
+      if (!b || !within(b, p)) return false;
+      return t.isUpdateExpression(e) || exprOk(e.right, p, scope);
+    }
+    if (t.isMemberExpression(e)) return staticMemberKey(e) === 'length' && exprOk(e.object, p, scope);
+    if (t.isNewExpression(e)) {
+      if (!t.isIdentifier(e.callee, { name: 'RegExp' }) || scope.getBinding('RegExp')) return false;
+      if (!e.arguments.length || e.arguments.length > 2 || !e.arguments.every((a) => t.isStringLiteral(a))) return false;
+      try {
+        const [src, flags] = (e.arguments as t.StringLiteral[]).map((a) => a.value);
+        new RegExp(src, flags);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    if (t.isCallExpression(e)) {
+      if (!e.arguments.every((a) => t.isExpression(a) && exprOk(a, p, scope))) return false;
+      const c = e.callee;
+      // a trap: Function("debugger")(), f.constructor("while (true) {}").call(…)
+      const trap = (x: t.Node) => {
+        const src = functionMadeFrom(x, scope);
+        return src !== null && TRAP_SOURCES.has(src);
+      };
+      if (trap(c)) return true;
+      if (t.isMemberExpression(c) && ['call', 'apply'].includes(staticMemberKey(c) ?? '') && trap(c.object)) return true;
+      // RegExp#test on a literal-built RegExp
+      if (t.isMemberExpression(c) && staticMemberKey(c) === 'test' && t.isIdentifier(c.object))
+        return regexpLocal(scope.getBinding(c.object.name), p);
+      if (!t.isIdentifier(c)) return false;
+      const b = scope.getBinding(c.name);
+      // another debug-only function, or a local holding what one returned
+      return !!b && (okFunctionBinding(b) || within(b, p));
+    }
+    return false;
+  };
+  const stmtOk = (st: t.Statement, p: NodePath<t.Function>, scope: NodePath['scope']): boolean => {
+    if (t.isEmptyStatement(st)) return true;
+    if (t.isExpressionStatement(st)) return exprOk(st.expression, p, scope);
+    if (t.isReturnStatement(st)) return exprOk(st.argument, p, scope);
+    if (t.isBlockStatement(st)) return st.body.every((x) => stmtOk(x, p, scope));
+    if (t.isIfStatement(st)) return exprOk(st.test, p, scope) && stmtOk(st.consequent, p, scope) && (!st.alternate || stmtOk(st.alternate, p, scope));
+    if (t.isVariableDeclaration(st)) return st.declarations.every((d) => t.isIdentifier(d.id) && exprOk(d.init, p, scope));
+    if (t.isFunctionDeclaration(st)) return ok.has(st);
+    if (t.isTryStatement(st))
+      return stmtOk(st.block, p, scope) && (!st.handler || stmtOk(st.handler.body, p, scope)) && (!st.finalizer || stmtOk(st.finalizer, p, scope));
+    return false;
+  };
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const [node, p] of fns) {
+      if (!ok.has(node)) continue;
+      const fn = p.node;
+      const good =
+        fn.params.every((q) => t.isIdentifier(q)) &&
+        t.isBlockStatement(fn.body) &&
+        !walkFinds(fn.body, (x) => t.isThisExpression(x) || t.isIdentifier(x, { name: 'arguments' })) &&
+        fn.body.body.every((st) => stmtOk(st, p, p.get('body').scope));
+      // (a body only reached through `.constructor` is never run: judged by its uses, below)
+      if (!good) {
+        ok.delete(node);
+        changed = true;
+      }
+    }
+  }
+  return ok;
+}
+
+/**
+ * Remove what javascript-obfuscator's debugProtection installs, once its
+ * guard is proven debug-only (debugOnlyFunctions):
+ *   • `[G.]setInterval(guard, n)` / `setTimeout(…)` on the global object —
+ *     including the IIFE that finds G (`try { G = Function("return this")() }
+ *     catch { G = window }`), which does nothing else;
+ *   • `CC(this, probe)();` (alone or in an argument-less IIFE) when CC is a
+ *     closed call controller and the probe is debug-only.
+ * Like the selfDefending probe, the check only hangs for a *tampered* copy of
+ * the obfuscator's output (its regexps test the guard's own text); the input
+ * is taken for the obfuscator's own output, on which it passes.
+ */
+function removeDebugGuards(ast: t.File): number {
+  if (hasDynamicScope(ast.program)) return 0;
+  const program = freshProgram(ast);
+  const ok = debugOnlyFunctions(program);
+  if (ok.size === 0) return 0;
+  const okValue = (e: t.Node | undefined, scope: NodePath['scope']): boolean => {
+    if (!e) return false;
+    if (t.isFunctionExpression(e)) return ok.has(e);
+    if (!t.isIdentifier(e)) return false;
+    const b = scope.getBinding(e.name);
+    return !!b && b.constantViolations.length === 0 && t.isFunctionDeclaration(b.path.node) && ok.has(b.path.node);
+  };
+  const literalArgs = (args: t.Node[]) => args.every((a) => t.isNumericLiteral(a) || t.isStringLiteral(a) || (t.isUnaryExpression(a, { operator: '-' }) && t.isNumericLiteral(a.argument)));
+  /** `setInterval(guard, n)` with the receiver proven global (or the call unqualified). */
+  const timerOf = (st: t.Node, scope: NodePath['scope'], globals: Set<string>): boolean => {
+    if (!t.isExpressionStatement(st) || !t.isCallExpression(st.expression)) return false;
+    const call = st.expression;
+    const c = call.callee;
+    const name = t.isIdentifier(c) ? c.name : t.isMemberExpression(c) ? staticMemberKey(c) : null;
+    if (!name || !['setInterval', 'setTimeout'].includes(name)) return false;
+    if (t.isIdentifier(c) && scope.getBinding(c.name)) return false;
+    if (t.isMemberExpression(c) && !(isGlobalObjectExpr(c.object, scope) || (t.isIdentifier(c.object) && globals.has(c.object.name)))) return false;
+    return okValue(call.arguments[0], scope) && literalArgs(call.arguments.slice(1));
+  };
+  let n = 0;
+  const doomed: NodePath[] = [];
+  /** Controllers whose runs were removed: they go too once nothing else uses them. */
+  const usedControllers = new Set<string>();
+  program.traverse({
+    ExpressionStatement(p) {
+      // a timer statement on its own
+      if (timerOf(p.node, p.scope, new Set())) {
+        doomed.push(p);
+        return;
+      }
+      const expr = p.node.expression;
+      if (!t.isCallExpression(expr) || expr.arguments.length) return;
+      const iife = t.isFunctionExpression(expr.callee) && expr.callee.params.length === 0 ? (p.get('expression.callee') as NodePath<t.FunctionExpression>) : null;
+      // the getGlobal IIFE whose last statement arms the timer:
+      //   var G; try { var h = function () { return Function("return this")(); }; G = h(); } catch (e) { G = window; } G.setInterval(guard, n);
+      // (or with the probe in a nested `function getGlobal() { … return G; }`)
+      if (iife) {
+        const body = iife.node.body.body;
+        const last = body[body.length - 1];
+        const globals = new Set<string>(); // locals only ever holding the global object
+        const getters = new Set<string>(); // local functions returning it
+        const local = (name: string) => {
+          const b = iife.scope.getBinding(name) ?? undefined;
+          return !b || b.scope === iife.scope || pathWithin(b.scope.path, iife.node);
+        };
+        const globalValue = (x: t.Node | null | undefined): boolean => {
+          if (!x) return false;
+          if (isGlobalObjectExpr(x, iife.scope) || (t.isIdentifier(x) && globals.has(x.name))) return true;
+          if (!t.isCallExpression(x) || x.arguments.length) return false;
+          return (t.isIdentifier(x.callee) && getters.has(x.callee.name)) || ((t.isFunctionExpression(x.callee) || t.isArrowFunctionExpression(x.callee)) && getter(x.callee));
+        };
+        function getter(f: t.Function): boolean {
+          if (f.params.length || f.async || f.generator) return false;
+          if (!t.isBlockStatement(f.body)) return globalValue(f.body);
+          const st = f.body.body;
+          const ret = st[st.length - 1];
+          return t.isReturnStatement(ret) && st.slice(0, -1).every(machinery) && globalValue(ret.argument);
+        }
+        function machinery(st: t.Statement): boolean {
+          if (t.isFunctionDeclaration(st) && st.id && local(st.id.name) && getter(st)) {
+            getters.add(st.id.name);
+            return true;
+          }
+          if (t.isVariableDeclaration(st))
+            return st.declarations.every((d) => {
+              if (!t.isIdentifier(d.id) || !local(d.id.name)) return false;
+              if (!d.init) return true;
+              if ((t.isFunctionExpression(d.init) || t.isArrowFunctionExpression(d.init)) && getter(d.init)) {
+                getters.add(d.id.name);
+                return true;
+              }
+              if (!globalValue(d.init)) return false;
+              globals.add(d.id.name);
+              return true;
+            });
+          if (t.isExpressionStatement(st) && t.isAssignmentExpression(st.expression, { operator: '=' }) && t.isIdentifier(st.expression.left)) {
+            if (!local(st.expression.left.name) || !globalValue(st.expression.right)) return false;
+            globals.add(st.expression.left.name);
+            return true;
+          }
+          if (t.isTryStatement(st)) return st.block.body.every(machinery) && (!st.handler || st.handler.body.body.every(machinery)) && !st.finalizer;
+          return false;
+        }
+        if (last && body.slice(0, -1).every(machinery)) {
+          // every value the receiver ever holds is the global object
+          const recv = t.isExpressionStatement(last) && t.isCallExpression(last.expression) && t.isMemberExpression(last.expression.callee) && t.isIdentifier(last.expression.callee.object) ? last.expression.callee.object.name : null;
+          const rb = recv ? iife.scope.getBinding(recv) : null;
+          const allGlobal =
+            !recv ||
+            (!!rb &&
+              rb.constantViolations.every((v) => v.isAssignmentExpression({ operator: '=' }) && globalValue(v.node.right)) &&
+              (!rb.path.isVariableDeclarator() || !rb.path.node.init || globalValue(rb.path.node.init)));
+          if (allGlobal && timerOf(last, iife.get('body').scope, globals)) {
+            doomed.push(p);
+            return;
+          }
+        }
+        // `(function () { CC(this, probe)(); })();`
+        if (body.length === 1 && t.isExpressionStatement(body[0]) && controllerRun(body[0].expression, iife.scope)) {
+          doomed.push(p);
+          return;
+        }
+      }
+      if (controllerRun(expr, p.scope)) doomed.push(p);
+    },
+  });
+  /** `CC(<inert>, probe)()` with CC a closed call controller and the probe debug-only. */
+  function controllerRun(e: t.Node, scope: NodePath['scope']): boolean {
+    if (!t.isCallExpression(e) || e.arguments.length || !t.isCallExpression(e.callee)) return false;
+    const inner = e.callee;
+    if (!t.isIdentifier(inner.callee) || inner.arguments.length !== 2) return false;
+    if (!(t.isThisExpression(inner.arguments[0]) || isInert(inner.arguments[0]))) return false;
+    if (!okValue(inner.arguments[1], scope)) return false;
+    if (!closedController(scope.getBinding(inner.callee.name))) return false;
+    usedControllers.add(inner.callee.name);
+    return true;
+  }
+  for (const d of doomed) {
+    try {
+      d.remove();
+      n++;
+    } catch {
+      /**/
+    }
+  }
+  // A closed controller nobody calls any more: creating it ran nothing else.
+  if (usedControllers.size) {
+    freshProgram(ast).traverse({
+      VariableDeclarator(p) {
+        if (!t.isIdentifier(p.node.id) || !usedControllers.has(p.node.id.name)) return;
+        const b = p.scope.getBinding(p.node.id.name);
+        if (!b || b.path.node !== p.node || b.referencePaths.length || !closedController(b)) return;
+        try {
+          p.remove();
+          n++;
+        } catch {
+          /**/
+        }
+      },
+    });
+  }
+  return n;
+}
+
+/**
+ * A call controller nothing can observe: `var CC = function () { … }();` with
+ * no free references but harmless globals, no `this` — calling what it
+ * returns can only run the function handed to it (at most once).
+ */
+function closedController(controller: Binding | undefined | null): boolean {
+  if (!controller || !controller.path.isVariableDeclarator() || controller.constantViolations.length > 0) return false;
+  const cInit = controller.path.get('init');
+  if (!cInit.isCallExpression() || cInit.node.arguments.length > 0) return false;
+  const cFn = cInit.get('callee');
+  if (!cFn.isFunctionExpression() && !cFn.isArrowFunctionExpression()) return false;
+  const refs = freeReferences(cFn);
+  if (refs.usesThis || refs.reads.size || refs.writes.size || refs.mutates.size) return false;
+  const ownArguments = cFn.isFunctionExpression();
+  return ![...refs.globals].some((g) => !SLICE_SAFE_GLOBALS.has(g) && !(ownArguments && g === 'arguments'));
+}
+
 /** Methods a self-defending probe may call on its own source text. */
 const SELF_INSPECTION_METHODS = new Set([
+  'bind', // `X.bind()` — a bound copy, whose text is native code
   'toString',
   'valueOf',
   'constructor',
@@ -8286,12 +8665,15 @@ function isSelfInspection(node: t.Node, self: string, depth = 0): boolean {
       node.arguments.every((a) => t.isExpression(a) && isSelfInspection(a, self, depth + 1))
     );
   }
-  if (t.isBinaryExpression(node, { operator: '+' }))
+  // `+` and comparisons of inspections (`… .indexOf("\n") !== -1`): strings
+  // and numbers only, so no valueOf/toString of user objects runs
+  if (t.isBinaryExpression(node) && ['+', '===', '!==', '==', '!=', '<', '>', '<=', '>='].includes(node.operator))
     return (
       t.isExpression(node.left) &&
       isSelfInspection(node.left, self, depth + 1) &&
       isSelfInspection(node.right, self, depth + 1)
     );
+  if (t.isUnaryExpression(node) && ['-', '!'].includes(node.operator)) return isSelfInspection(node.argument, self, depth + 1);
   return false;
 }
 
@@ -8330,12 +8712,26 @@ function removeCallControllerWrappers(ast: t.File): number {
       const body = t.isBlockStatement(probe.body)
         ? probe.body.body.filter((st) => !t.isEmptyStatement(st))
         : null;
-      const returned = body
-        ? body.length === 1 && t.isReturnStatement(body[0]) && body[0].argument
-          ? body[0].argument
-          : null
-        : probe.body;
+      // javascript-obfuscator 5 puts guards before the final return:
+      // `if (X.bind().toString().indexOf("\n") !== -1) return;` — each an
+      // inspection deciding whether to stop early, nothing else.
+      let returned: t.Node | null = body ? null : probe.body;
+      const guards: t.Node[] = [];
+      if (body) {
+        for (let i = 0; i < body.length; i++) {
+          const st = body[i];
+          if (i === body.length - 1 && t.isReturnStatement(st) && st.argument) {
+            returned = st.argument;
+            break;
+          }
+          const cons = t.isIfStatement(st) && !st.alternate ? (t.isBlockStatement(st.consequent) ? st.consequent.body : [st.consequent]) : null;
+          const early = cons && cons.length === 1 && t.isReturnStatement(cons[0]) ? cons[0] : null;
+          if (!early || (early.argument && !isSelfInspection(early.argument, id.name))) return;
+          guards.push((st as t.IfStatement).test);
+        }
+      }
       if (!returned || !isSelfInspection(returned, id.name)) return;
+      if (!guards.every((g) => isSelfInspection(g, id.name))) return;
       if (!walkFinds(returned, (x) => t.isIdentifier(x, { name: id.name }))) return;
 
       const self = p.scope.getBinding(id.name);
@@ -8521,8 +8917,19 @@ function passDeadFunctions(ast: t.File, log: Logger): number {
       VariableDeclarator(p) {
         const { id, init } = p.node;
         if (!t.isIdentifier(id) || !init) return;
-        if (!t.isFunctionExpression(init) && !t.isArrowFunctionExpression(init)) return;
-        owners.set(init, id.name);
+        if (t.isFunctionExpression(init) || t.isArrowFunctionExpression(init)) {
+          owners.set(init, id.name);
+          declOf.set(id.name, p.node);
+          return;
+        }
+        // `var A = F;` — an alias of a function (javascript-obfuscator's
+        // string-array wrappers, left behind once their calls are folded).
+        // Reading F cannot throw when F is a function declaration (hoisted)
+        // or a var/param (never in a temporal dead zone), so an unused alias
+        // goes the way an unused function does — and may free F in turn.
+        if (!t.isIdentifier(init) || (p.parent as t.VariableDeclaration).kind !== 'var') return;
+        const fb = p.scope.getBinding(init.name);
+        if (!fb || !['hoisted', 'var', 'param'].includes(fb.kind)) return;
         declOf.set(id.name, p.node);
       },
     });
@@ -9888,7 +10295,6 @@ function passObjectTables(ast: t.File, log: Logger): number {
   const dyn = dynamicScopes(program);
   const facts = writeOnceFacts(program);
   const order = documentOrder(ast);
-
   type Site = {
     member: NodePath<t.MemberExpression>;
     value: t.Node;
@@ -9896,11 +10302,30 @@ function passObjectTables(ast: t.File, log: Logger): number {
     scopeOf: NodePath;
     inTable: boolean;
   };
-  const sites: Site[] = [];
-  const tableNodes: t.Node[] = [];
-  let tables = 0;
-
-  for (const fact of facts.values()) {
+  type Candidate = { binding: Binding; value: t.ObjectExpression; props: Map<string, t.Node>; sites: Site[]; escapes: NodePath[] };
+  const candidates = new Map<Binding, Candidate>();
+  // A table reassigned (or `F++`'d) only in cloned dead code (`F = Z` under
+  // `if (F.cmp(F.a, F.a))`): taken write-once with those writes ignored, and
+  // the writes kept as escapes for the fixpoint below to rule out.
+  const reassigned = new Map<Binding, NodePath[]>();
+  program.traverse({
+    VariableDeclarator(p) {
+      if (!t.isIdentifier(p.node.id) || !t.isObjectExpression(p.node.init)) return;
+      const b = p.scope.getBinding(p.node.id.name);
+      if (!b || b.path.node !== p.node || b.constantViolations.length === 0) return;
+      if (!b.constantViolations.every((v) => (v.isAssignmentExpression() && t.isIdentifier(v.node.left)) || (v.isUpdateExpression() && t.isIdentifier(v.node.argument)))) return;
+      reassigned.set(b, b.constantViolations);
+    },
+  });
+  const allFacts = [...facts.values()];
+  if (reassigned.size) {
+    const more = writeOnceFacts(program, { ignoreWrites: new Set([...reassigned.values()].flat().map((v) => v.node)) });
+    for (const b of reassigned.keys()) {
+      const f = more.get(b);
+      if (f && !facts.has(b)) allFacts.push(f);
+    }
+  }
+  for (const fact of allFacts) {
     if (!t.isObjectExpression(fact.value)) continue;
     if (dyn.observesBinding(fact.binding)) continue;
     const props = new Map<string, t.Node>();
@@ -9922,15 +10347,15 @@ function passObjectTables(ast: t.File, log: Logger): number {
       props.set(key, t.isObjectMethod(prop) ? prop : prop.value);
     }
     if (!ok) continue;
-
-    // Every reference must be a property read/call with no way to mutate or
-    // leak the object; otherwise its properties are not frozen.
+    // Property reads/calls are sites; anything that could mutate or leak the
+    // object is an escape (judged below).
     const local: Site[] = [];
+    const escapes: NodePath[] = [...(reassigned.get(fact.binding) ?? [])];
     for (const r of fact.binding.referencePaths) {
       const m = r.parentPath;
       if (!m?.isMemberExpression() || m.node.object !== r.node) {
-        ok = false;
-        break;
+        escapes.push(r);
+        continue;
       }
       const gp = m.parentPath;
       const node = m.node;
@@ -9944,28 +10369,140 @@ function passObjectTables(ast: t.File, log: Logger): number {
         (gp.isAssignmentPattern() && gp.node.left === node) ||
         (gp.isObjectProperty() && gp.parentPath?.isObjectPattern());
       if (isWrite || gp.isOptionalCallExpression()) {
-        ok = false;
-        break;
+        escapes.push(r);
+        continue;
       }
       const isCall = gp.isCallExpression() && gp.node.callee === node;
       const key = staticMemberKey(node);
       if (key === null) {
-        if (isCall) {
-          ok = false; // dynamic method call hands the object out as `this`
-          break;
-        }
+        if (isCall) escapes.push(r); // dynamic method call hands the object out as `this`
         continue; // dynamic read: harmless
       }
       const value = props.get(key);
       if (value === undefined) continue; // inherited / missing
       local.push({ member: m, value, call: isCall, scopeOf: fact.statement, inTable: false });
     }
-    if (!ok) continue;
-    tables++;
-    tableNodes.push(fact.value);
-    sites.push(...local);
+    candidates.set(fact.binding, { binding: fact.binding, value: fact.value, props, sites: local, escapes });
   }
 
+  // An escape (a use that could mutate or leak a table) is harmless when it
+  // sits in a branch that is dead under the candidate tables' own values:
+  // javascript-obfuscator's dead-code injection clones real code into
+  // `if (T.cmp(T.a, T.a))` branches, and with mangled names a clone can
+  // mention a table by value. Greatest fixpoint: take every candidate as
+  // frozen; drop a table with an escape no frozen guard rules out; repeat.
+  // Sound by induction on time: before the first escape runs, every table is
+  // untouched, so the guard around it evaluated exactly as computed here —
+  // and kept that branch closed.
+  const frozen = new Set(candidates.keys());
+  /** A primitive the expression evaluates to, given the frozen tables; null if unknown. */
+  const evaluate = (e: t.Node, scope: NodePath['scope'], depth = 0, env: Map<string, unknown> = new Map()): { value: unknown } | null => {
+    if (depth > 24) return null;
+    if (t.isIdentifier(e) && env.has(e.name)) return { value: env.get(e.name) };
+    if (t.isStringLiteral(e) || t.isNumericLiteral(e) || t.isBooleanLiteral(e)) return { value: e.value };
+    if (t.isNullLiteral(e)) return { value: null };
+    if (t.isIdentifier(e, { name: 'undefined' }) && !scope.getBinding('undefined')) return { value: undefined };
+    const tableValue = (m: t.MemberExpression): { value: t.Node; table: Candidate } | null => {
+      if (!t.isIdentifier(m.object) || env.has(m.object.name)) return null;
+      const tb = scope.getBinding(m.object.name);
+      const key = staticMemberKey(m);
+      if (!tb || !frozen.has(tb) || key === null) return null;
+      const c = candidates.get(tb)!;
+      const v = c.props.get(key);
+      return v === undefined ? null : { value: v, table: c };
+    };
+    if (t.isMemberExpression(e)) {
+      const hit = tableValue(e);
+      return hit && !t.isFunction(hit.value) ? evaluate(hit.value, hit.table.binding.scope, depth + 1) : null;
+    }
+    if (t.isCallExpression(e) && t.isMemberExpression(e.callee)) {
+      const hit = tableValue(e.callee);
+      const tpl = hit ? templateOf(hit.value) : null;
+      if (!tpl || !e.arguments.every((x) => t.isExpression(x))) return null;
+      // A call: the arguments first, then the method's body with its
+      // parameters bound, read where the method was written.
+      const args: unknown[] = [];
+      for (const x of e.arguments) {
+        const v = evaluate(x, scope, depth + 1, env);
+        if (!v) return null;
+        args.push(v.value);
+      }
+      return evaluate(tpl.body, hit!.table.binding.scope, depth + 1, new Map(tpl.params.map((name, i) => [name, args[i]])));
+    }
+    if (t.isUnaryExpression(e) && ['!', '-', '+', 'typeof', 'void'].includes(e.operator)) {
+      const v = evaluate(e.argument, scope, depth + 1, env);
+      if (!v) return null;
+      const x = v.value as never;
+      return { value: e.operator === '!' ? !x : e.operator === '-' ? -x : e.operator === '+' ? +x : e.operator === 'void' ? undefined : typeof x };
+    }
+    if (t.isLogicalExpression(e)) {
+      const l = evaluate(e.left, scope, depth + 1, env);
+      if (!l) return null;
+      const short = e.operator === '&&' ? !l.value : e.operator === '||' ? !!l.value : l.value != null;
+      return short ? l : evaluate(e.right, scope, depth + 1, env);
+    }
+    if (t.isBinaryExpression(e) && ['===', '!==', '==', '!=', '<', '>', '<=', '>=', '+', '-', '*', '/', '%'].includes(e.operator)) {
+      const l = evaluate(e.left, scope, depth + 1, env);
+      const r = l && evaluate(e.right, scope, depth + 1, env);
+      if (!l || !r) return null;
+      const x = l.value as never;
+      const y = r.value as never;
+      switch (e.operator) {
+        case '===': return { value: x === y };
+        case '!==': return { value: x !== y };
+        case '==': return { value: x == y };
+        case '!=': return { value: x != y };
+        case '<': return { value: x < y };
+        case '>': return { value: x > y };
+        case '<=': return { value: x <= y };
+        case '>=': return { value: x >= y };
+        case '+': return { value: (x as number) + (y as number) };
+        case '-': return { value: x - y };
+        case '*': return { value: x * y };
+        case '/': return { value: x / y };
+        default: return { value: x % y };
+      }
+    }
+    return null;
+  };
+  /** `r` lies in a branch its guard never enters, given the frozen tables. */
+  const deadBranch = (r: NodePath): boolean => {
+    for (let q: NodePath | null = r; q?.parentPath; q = q.parentPath) {
+      const up: NodePath = q.parentPath;
+      let guard: t.Node | null = null;
+      let entersWhen: ((v: unknown) => boolean) | null = null;
+      if ((up.isIfStatement() || up.isConditionalExpression()) && (q.key === 'consequent' || q.key === 'alternate')) {
+        guard = up.node.test;
+        entersWhen = q.key === 'consequent' ? (v) => !!v : (v) => !v;
+      } else if (up.isLogicalExpression() && q.key === 'right') {
+        guard = up.node.left;
+        const op = up.node.operator;
+        entersWhen = op === '&&' ? (v) => !!v : op === '||' ? (v) => !v : (v) => v == null;
+      }
+      if (guard && entersWhen) {
+        const v = evaluate(guard, up.scope);
+        if (v && !entersWhen(v.value)) return true;
+      }
+    }
+    return false;
+  };
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const b of [...frozen]) {
+      if (candidates.get(b)!.escapes.every(deadBranch)) continue;
+      frozen.delete(b);
+      changed = true;
+    }
+  }
+  const sites: Site[] = [];
+  const tableNodes: t.Node[] = [];
+  let tables = 0;
+  for (const b of frozen) {
+    const c = candidates.get(b)!;
+    tables++;
+    tableNodes.push(c.value);
+    sites.push(...c.sites);
+  }
   for (const s of sites) s.inTable = tableNodes.some((tn) => pathWithin(s.member, tn));
   // Innermost first so nested `T.a(T.b(x))` composes; table bodies before
   // their call sites so instantiated templates are already simplified.
@@ -10282,6 +10819,12 @@ function passDeadStores(ast: t.File, log: Logger): number {
         !!fnNode && !t.isArrowFunctionExpression(fnNode) && usesArguments(fnNode);
       for (const b of Object.values(scope.bindings)) {
         if (b.referenced) continue;
+        // `x -= 1`, `x++` and `x ||= y` read x before they write it, but Babel
+        // records them only as writes (constantViolations), never as
+        // references: a binding written that way is read, and its plain
+        // stores are live (MeowShield's state machines are spelt
+        // `(S = 0) || …; (S -= 49258) - -49258`).
+        if (b.constantViolations.some((v) => v.isUpdateExpression() || (v.isAssignmentExpression() && v.node.operator !== '='))) continue;
         // `referenced` only counts references the AST shows; a direct `eval`
         // below this scope can read the binding without one.
         if (dyn.observesBinding(b)) continue;
@@ -10694,13 +11237,23 @@ function passClosedFunctionEval(ast: t.File, log: Logger): number {
     depMemo.set(b, out);
     return out;
   };
-  const sliceFor = (f: Binding): { members: Set<Binding>; setups: Setup[] } => {
+  const sliceFor = (f: Binding, extra: Iterable<Binding> = []): { members: Set<Binding>; setups: Setup[] } => {
     const set = new Set(depsOf(f));
+    for (const e of extra) for (const y of depsOf(e)) set.add(y);
     const used = new Set<Setup>();
+    // A statement that only *calls* slice functions with literal arguments
+    // (a control-flow storage object keyed by decoded strings) uses the
+    // slice — those calls are probed like any other — rather than setting
+    // up its state; only other contact (the rotation IIFE handed the pool
+    // function itself) makes it part of the slice.
+    const literalUseOnly = (x: Binding, st: Setup): boolean =>
+      externalRefs(x)
+        .filter((r) => pathWithin(r, st.path.node))
+        .every((r) => (literalSites.get(x) ?? []).some((site) => site.path.node === r.parent));
     for (let changed = true; changed; ) {
       changed = false;
       for (const st of allSetups) {
-        if (used.has(st) || ![...st.touches].some((x) => set.has(x))) continue;
+        if (used.has(st) || ![...st.touches].some((x) => set.has(x) && !literalUseOnly(x, st))) continue;
         used.add(st);
         for (const x of st.touches) for (const y of depsOf(x)) set.add(y);
         changed = true;
@@ -10785,7 +11338,45 @@ function passClosedFunctionEval(ast: t.File, log: Logger): number {
   const removable: Array<{ members: t.Node[]; setups: t.Node[]; aliases: t.Node[] }> = [];
   const seenSlices = new Set<string>();
 
-  const roots = [...literalSites.keys()].map((b) => ({ b, slice: sliceFor(b) }));
+  // A member called *without* literal arguments from inside another closed
+  // function is not opaque when that caller joins the slice: the call is then
+  // machinery, and the caller's own call sites are what gets probed (or what
+  // vetoes the slice, if they are opaque in turn). javascript-obfuscator's
+  // function wrappers `function W(a, b, c, d, e) { return DEC(d - 21, c); }`
+  // reach the decoder only this way. Callers that call with literals stay
+  // out — those calls are probed already, and the caller's own opaque call
+  // sites must not veto folding them.
+  const literalCall = (b: Binding, r: NodePath): boolean => {
+    const call = r.parentPath;
+    return !!call?.isCallExpression() && call.node.callee === r.node && (literalSites.get(b) ?? []).some((st) => st.path === call);
+  };
+  const grownSlice = (b: Binding): { members: Set<Binding>; setups: Setup[] } => {
+    let slice = sliceFor(b);
+    const absorbed = new Set<Binding>();
+    for (let round = 0; round < 8; round++) {
+      const nodes = [...slice.members].map((x) => (members.get(x) as { path: NodePath }).path.node);
+      const more = new Set<Binding>();
+      for (const x of slice.members) {
+        if (members.get(x)!.kind !== 'fn') continue;
+        for (const r of externalRefs(x)) {
+          if (nodes.some((n) => pathWithin(r, n)) || literalCall(x, r)) continue;
+          // the innermost closed function around the call (a wrapper nested
+          // in a guard function is the caller, not the guard)
+          const around = closedFns.filter((fb) => pathWithin(r, (members.get(fb) as { path: NodePath }).path.node));
+          const owner = around.find((fb) => around.every((o) => o === fb || !pathWithin((members.get(o) as { path: NodePath }).path, (members.get(fb) as { path: NodePath }).path.node)));
+          if (owner && !slice.members.has(owner)) more.add(owner);
+        }
+      }
+      if (more.size === 0) break;
+      for (const m of more) absorbed.add(m);
+      slice = sliceFor(b, absorbed);
+    }
+    return slice;
+  };
+  /** Why slices were set aside, for the log. */
+  const kept = new Map<string, number>();
+  const keep = (why: string): void => void kept.set(why, (kept.get(why) ?? 0) + 1);
+  const roots = [...literalSites.keys()].map((b) => ({ b, slice: grownSlice(b) }));
   roots.sort((x, y) => x.slice.members.size - y.slice.members.size);
 
   for (const { slice } of roots) {
@@ -10806,8 +11397,10 @@ function passClosedFunctionEval(ast: t.File, log: Logger): number {
       fnMembers.some((b) =>
         [...(members.get(b) as { refs: FreeRefs }).refs.mutates].some((target) => target !== b)
       )
-    )
+    ) {
+      keep('shared writes');
       continue;
+    }
     const internalRoots: t.Node[] = [
       ...sliceMembers.map((b) => (members.get(b) as { path: NodePath }).path.node),
       ...slice.setups.map((st) => st.path.node),
@@ -10819,11 +11412,24 @@ function passClosedFunctionEval(ast: t.File, log: Logger): number {
     // data it touches is initialised before the first setup runs.
     if (slice.setups.length) {
       const list = slice.setups[0].path.parentPath!.node as t.BlockStatement | t.Program;
-      if (slice.setups.some((st) => st.path.parentPath!.node !== list)) continue;
-      if (
-        fnMembers.some((b) => (members.get(b) as { path: NodePath }).path.parentPath?.node !== list)
-      )
+      if (slice.setups.some((st) => st.path.parentPath!.node !== list)) {
+        keep('setups apart');
         continue;
+      }
+      // A member nested inside a function of that list (a wrapper inside the
+      // function that uses it, or inside the rotation IIFE) cannot run before
+      // its enclosing function does — never during the declarations-only
+      // prefix the setups sit in, except as the setup's own machinery.
+      const reachableEarly = (b: Binding): boolean => {
+        const mp = (members.get(b) as { path: NodePath }).path;
+        if (mp.parentPath?.node === list) return false;
+        const fn = mp.parentPath?.getFunctionParent();
+        return !fn || !pathWithin(fn, list);
+      };
+      if (fnMembers.some(reachableEarly)) {
+        keep('member callable before setup');
+        continue;
+      }
       const firstSetup = list.body.indexOf(slice.setups[0].path.node);
       const dataOk = sliceMembers.every((b) => {
         const m = members.get(b)!;
@@ -10832,11 +11438,17 @@ function passClosedFunctionEval(ast: t.File, log: Logger): number {
         const at = declStmt ? list.body.indexOf(declStmt) : -1;
         return at !== -1 && at < firstSetup;
       });
-      if (!dataOk) continue;
+      if (!dataOk) {
+        keep('data after setup');
+        continue;
+      }
     }
     // Unique names inside the slice.
     const names = sliceMembers.map((b) => b.identifier.name);
-    if (new Set(names).size !== names.length) continue;
+    if (new Set(names).size !== names.length) {
+      keep('names repeat');
+      continue;
+    }
 
     // Outside the slice, members may only be *called* — anything else could
     // alias or mutate the state the evaluation captured.
@@ -10859,7 +11471,10 @@ function passClosedFunctionEval(ast: t.File, log: Logger): number {
       }
       if (leaks) break;
     }
-    if (leaks) continue;
+    if (leaks) {
+      keep('member escapes');
+      continue;
+    }
 
     type Probe = {
       fn: string;
@@ -10886,7 +11501,10 @@ function passClosedFunctionEval(ast: t.File, log: Logger): number {
       }
     // Untested arguments could expose internal state even when all literal
     // probes return primitives. Keep slices with opaque external calls.
-    if (opaque.size > 0) continue;
+    if (opaque.size > 0) {
+      keep(`opaque calls of ${[...opaque].map((x) => x.identifier.name).slice(0, 2).join(', ')}`);
+      continue;
+    }
     const probeList = [...probes.values()];
 
     if (probeList.length > 0) {
@@ -11050,7 +11668,8 @@ function passClosedFunctionEval(ast: t.File, log: Logger): number {
     'closed-function-eval',
     folded,
     'calls folded',
-    `${closedFns.length} closed fns, ${evaluated} slices evaluated, ${removedGroups} removed`
+    `${closedFns.length} closed fns, ${evaluated} slices evaluated, ${removedGroups} removed` +
+      (kept.size ? `, kept: ${[...kept].map(([w, k]) => (k > 1 ? `${w} ×${k}` : w)).slice(0, 3).join('; ')}` : '')
   );
   return folded + removedGroups;
 }
@@ -12484,10 +13103,19 @@ export async function deobfuscate(
     // A newline test left unsettled answered "no" in the original (no
     // function text had a newline); pretty-printed, it would answer "yes"
     // and fire its countermeasure. Compact output keeps every answer.
+    // The same holds for a backtracking self-test (it finishes on one-line
+    // text only), for any read of a function's text that remains, and for
+    // methods still called through undecoded keys, any of which could be one.
     const left = unsettledSelfChecks(ast);
-    if (left.newline && runSourceFacts.newlineFree) {
+    if ((left.newline || left.backtracking || left.hidden || left.textReads) && runSourceFacts.newlineFree) {
       currentCode = generate(ast, { comments: true, compact: true, jsescOption: { minimal: true } }).code;
-      log.note('self-text checks unsettled', `${left.newline} newline tests · output kept compact`);
+      const why = [
+        left.newline && `${left.newline} newline test${left.newline === 1 ? '' : 's'}`,
+        left.backtracking && `${left.backtracking} backtracking self-test${left.backtracking === 1 ? '' : 's'}`,
+        left.hidden && `${left.hidden} call${left.hidden === 1 ? '' : 's'} through undecoded keys`,
+        left.textReads && `${left.textReads} read${left.textReads === 1 ? '' : 's'} of a function's own text`,
+      ].filter(Boolean);
+      log.note('self-text checks unsettled', `${why.join(' · ')} · output kept compact`);
     }
     if (left.integrity) {
       const m = `locks: ${left.integrity} integrity lock${left.integrity === 1 ? '' : 's'} unsettled — the output's text no longer hashes to its constant`;

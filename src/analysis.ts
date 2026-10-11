@@ -657,7 +657,12 @@ export interface WriteOnceFact {
  */
 export function writeOnceFacts(
   program: NodePath<t.Program>,
-  opts: { includeScriptGlobals?: boolean } = {}
+  /**
+   * `ignoreWrites`: reassignments the caller has proven never run (see
+   * B07c, where they sit in branches dead under the tables' own values);
+   * a declarator whose other writes are all ignored still qualifies.
+   */
+  opts: { includeScriptGlobals?: boolean; ignoreWrites?: Set<t.Node> } = {}
 ): Map<Binding, WriteOnceFact> {
   const facts = new Map<Binding, WriteOnceFact>();
   const order = documentOrder(program.node);
@@ -725,7 +730,7 @@ export function writeOnceFacts(
       const declStmt = declPath.parentPath;
       if (!declStmt?.isVariableDeclaration()) return null;
       if (declPath.node.init) {
-        if (binding.constantViolations.length !== 0) return null;
+        if (binding.constantViolations.some((v) => !opts.ignoreWrites?.has(v.node))) return null;
         value = declPath.node.init;
         statement = declStmt as NodePath<t.Statement>;
         writeNode = declPath.node;
@@ -824,10 +829,27 @@ export function writeOnceFacts(
       fnMemo.set(f.node, res);
       return res;
     };
+    // Nothing up to and including S can call out: S lies in the inert prefix
+    // of its function body — or, for a declarator, everything before its
+    // statement does and the declarators up to it (they run in order) have
+    // inert initialisers: `var T = {…}, C = function () {…}();` sets T before
+    // C's call can run anything.
+    const declaratorPrefix = (): boolean => {
+      if (!owner || block.node !== owner || !statement.isVariableDeclaration() || !t.isVariableDeclarator(writeNode)) return false;
+      const body = (owner as t.BlockStatement | t.Program).body;
+      const at = body.indexOf(statement.node as t.Statement);
+      const prefix = inertPrefix(owner);
+      if (at < 0 || !body.slice(0, at).every((st) => prefix.has(st))) return false;
+      for (const d of statement.node.declarations) {
+        if (d.init && !isInert(d.init)) return false;
+        if (d === writeNode) return true;
+      }
+      return false;
+    };
+    const prefixed = !!owner && block.node === owner && (inertPrefix(owner).has(statement.node) || declaratorPrefix());
     for (const r of binding.referencePaths) {
       if (!isInside(r.node, block.node, order)) return null;
       if (inValueBody(r)) continue;
-      const prefixed = !!owner && block.node === owner && inertPrefix(owner).has(statement.node);
       if (!isAfter(r.node, writeNode, order)) {
         // A closure created before S (`var f = function () { … x … }; x = v;`)
         // can only run once something calls it; if nothing up to and

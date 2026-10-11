@@ -10,9 +10,13 @@ async function execute(code: string): Promise<string[]> {
   const events: string[] = [];
   const context = vm.createContext({
     console: { log: (...args: unknown[]) => events.push(args.map(String).join(' ')) },
+    // a host with timers (javascript-obfuscator's debug protection arms one);
+    // the callback never fires, so only what the program prints counts
+    setInterval: () => 0,
+    clearInterval: () => {},
   });
   try {
-    new vm.Script(code).runInContext(context, { timeout: 1000 });
+    new vm.Script(code).runInContext(context, { timeout: 3000 });
   } catch (error) {
     events.push(`THREW ${(error as Error).name}`);
   }
@@ -73,8 +77,17 @@ describe('obfuscated corpus', () => {
         // obfuscator's generated `__p_XXXX` names survives.
         if (config.startsWith('jsconfuser-') && config !== 'jsconfuser-medium.json')
           expect(result.deobfuscatedCode).not.toMatch(/__p_[A-Za-z0-9]{4}/);
+        // javascript-obfuscator 5 at its strongest settings comes back as the
+        // program: the string array, storage objects, self-defending and
+        // debug protection all gone (the obfuscator's `_0x…` names stay —
+        // renaming is opt-in — hence the slack). 10-eval keeps a direct eval
+        // whose source is itself an encrypted string.
+        if (config.startsWith('jso5-') && name !== '10-eval.js') {
+          expect(result.deobfuscatedCode.length).toBeLessThan(3 * source.length);
+          expect(result.deobfuscatedCode).not.toMatch(/setInterval|debugger|\(\(\(\.\+\)\+\)\+\)\+\$/);
+        }
         // preset fixtures stack every transform: up to ~20 s each on their own
-      }, config === 'jsconfuser-medium.json' ? 120_000 : 30_000);
+      }, config === 'jsconfuser-medium.json' || config.startsWith('jso5-') ? 120_000 : 30_000);
     }
   }
 });
@@ -682,6 +695,79 @@ describe('structural primitives', () => {
     })();`;
     const kept = await recover(read);
     expect(await execute(kept.deobfuscatedCode)).toEqual(['undefined function']);
+  });
+
+  it('keeps stores that compound assignments and updates read', async () => {
+    // Babel lists `s -= 2` and `c++` as writes of s and c, not as reads; the
+    // stores before them are nonetheless what those operators read.
+    const source = `(function () {
+      var s, c;
+      var r = ((s = 5) || 0) && (s -= 2) - 1;
+      c = 10;
+      var d = c++ * 2;
+      var e;
+      (e = 0) || (e ||= 7);
+      console.log(r, d, (e += 1) - 1);
+    })();`;
+    expect(await execute(source)).toEqual(['2 20 7']);
+    const result = await recover(source);
+    expect(await execute(result.deobfuscatedCode)).toEqual(['2 20 7']);
+  });
+
+  it('inlines a storage table whose escapes sit only in branches its own values close', async () => {
+    // javascript-obfuscator's dead-code injection clones code into
+    // `if (T.ne(T.a, T.a))` branches, and a clone may mention the table by
+    // value (or even reassign it). Under the table's own values those
+    // branches never run, so the table never escapes: inline it.
+    const source = `(function () {
+      var T = { ne: function (a, b) { return a !== b; }, add: function (a, b) { return a + b; }, k: "kk", s: "Hello " };
+      function run(x) {
+        if (T.ne(T.k, T.k)) { leak(T); T = null; }
+        return T.add(T.s, x);
+      }
+      console.log(run("World"));
+    })();`;
+    expect(await execute(source)).toEqual(['Hello World']);
+    const result = await recover(source);
+    expect(await execute(result.deobfuscatedCode)).toEqual(['Hello World']);
+    expect(result.deobfuscatedCode).not.toMatch(/\bT\b|leak/);
+    // An escape in a branch that does run keeps the table: `mut` may change it.
+    const live = `(function () {
+      var T = { eq: function (a, b) { return a === b; }, k: "kk", s: "Hello " };
+      function mut(t) { t.s = "Bye "; }
+      if (T.eq(T.k, T.k)) mut(T);
+      console.log(T.s + "World");
+    })();`;
+    const kept = await recover(live);
+    expect(await execute(kept.deobfuscatedCode)).toEqual(['Bye World']);
+  });
+
+  it('takes a declarator as set before a hoisted function can read it only when nothing earlier calls out', async () => {
+    // \`var T = {…}, C = f();\` sets T before f runs: f may read T's values.
+    const after = `(function () {
+      var T = { a: "x" }, C = f();
+      function f() { return T.a + "!"; }
+      console.log(C);
+    })();`;
+    const r1 = await recover(after);
+    expect(await execute(r1.deobfuscatedCode)).toEqual(['x!']);
+    // \`var C = f(), T = {…};\` runs f while T is still undefined.
+    const before = `(function () {
+      var C = f(), T = { a: "x" };
+      function f() { return typeof T; }
+      console.log(C, typeof T);
+    })();`;
+    const r2 = await recover(before);
+    expect(await execute(r2.deobfuscatedCode)).toEqual(['undefined object']);
+  });
+
+  it('keeps output compact while methods are still called through undecoded keys', async () => {
+    // Any of them could read a function's own text, which the original
+    // (one-line) program had without newlines.
+    const source = `(function(){var k=function(i){return["toString","search"][i]};function g(){return 1}var t=g[k(0)]();console.log(t[k(1)]("\\n"),g())})();`;
+    expect(await execute(source)).toEqual(['-1 1']);
+    const result = await recover(source, DEFAULT_ENABLED_PASSES.filter((p) => p !== 'closed-function-eval'));
+    expect(await execute(result.deobfuscatedCode)).toEqual(['-1 1']);
   });
 
   it('bounds a table member function by its call sites and restores its moved declaration', async () => {

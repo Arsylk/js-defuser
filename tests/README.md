@@ -8,7 +8,11 @@ npm run test:gates  # whole-program release gates through the built CLI
 Every test compares the execution of the original and the recovered program in
 isolated Node VM contexts: recovery must parse, report no pass errors, and print
 the same things. `fixtures/` holds 29 small semantics programs; `obfuscated/`
-holds those programs transformed by javascript-obfuscator 4.2.2 (eight
+holds those programs transformed by javascript-obfuscator 5.9.0 at its
+`high-obfuscation` preset and with every option turned up (`jso5-high.json`,
+`jso5-max.json` — each records its options; those cases must also come back
+small and free of the self-defending/debug-protection machinery), by
+javascript-obfuscator 4.2.2 (eight
 configurations, seed 1234) and by js-confuser 2.1.3 (one configuration per
 transform, plus the `low`, `medium` and `locks` presets). The js-confuser cases
 must additionally come back without any of the obfuscator's generated names.
