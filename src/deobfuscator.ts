@@ -234,6 +234,8 @@ export interface DeobfuscationResult {
 export const DEFAULT_ENABLED_PASSES = [
   'function-constructor', // B03c
   'eval-literal', // B03d
+  'eval-closed-call', // B03g
+  'jsfuck-unwrap', // B03h
   'rgf', // B03e
   'rgf-thunk', // B03f
   'cff-recover', // B13d
@@ -2183,6 +2185,375 @@ function passEvalLiteral(ast: t.File, log: Logger): number {
     n,
     'inlined',
     notExpression > 0 ? `${notExpression} not a lone expression` : undefined
+  );
+  return n;
+}
+
+// ── B03g: direct eval of a closed, pure decoder call (e.g. the packer) ───────
+
+/**
+ * Dean Edwards' `packer` (and anything shaped like it) ships the real program
+ * as `eval(<decoder>(…literals…))`, where the decoder is a self-contained pure
+ * string transform:
+ *
+ *   eval(function(p,a,c,k,e,d){ … return p }("0 1(2){…}", 62, 10, "…".split("|"), 0, {}))
+ *
+ * The call that builds the source is closed (its only free names are built-ins
+ * such as `String`, `RegExp`, `parseInt`) and side-effect-free, so evaluating
+ * *that slice alone* is as sound as folding any other closed decoder the engine
+ * already runs. The payload itself is never executed: the slice runs in the
+ * decoder sandbox, which exposes no `eval` and no `Function`, so a decoder that
+ * tried to run its own result would throw rather than execute it — we observe
+ * only the string it returns.
+ *
+ * A direct `eval(S)` runs `S` in the caller's scope. When the eval is the whole
+ * of a statement (its completion value is discarded), sits in sloppy code, and
+ * the recovered source declares nothing lexical at its top level, the recovered
+ * statements can replace the `eval(…)` verbatim: a sloppy direct eval hoists the
+ * payload's top-level `var`/function declarations into exactly the scope the
+ * statements now sit in, and runs its other statements in place. The rewrite is
+ * refused per call wherever any of those facts cannot be established — a name
+ * the payload declares already being bound at the call site, a trailing
+ * `let`/`const`/`class` or `"use strict"` the eval would *not* have leaked, a
+ * strict-mode caller, or another `eval`/`with` sharing the scope.
+ */
+function passEvalClosedCall(ast: t.File, log: Logger): number {
+  let n = 0;
+  let impure = 0;
+  let notString = 0;
+  const program = freshProgram(ast);
+  const programStrict =
+    program.node.sourceType === 'module' ||
+    program.node.directives.some((d) => d.value.value === 'use strict');
+
+  const inStrictCode = (p: NodePath): boolean => {
+    if (programStrict) return true;
+    for (let cur: NodePath | null = p; cur; cur = cur.parentPath) {
+      const node = cur.node;
+      if (t.isFunction(node) && t.isBlockStatement(node.body))
+        if (node.body.directives.some((d) => d.value.value === 'use strict')) return true;
+      if (t.isClassDeclaration(node) || t.isClassExpression(node)) return true;
+    }
+    return false;
+  };
+
+  type Job = { stmt: NodePath<t.ExpressionStatement>; body: t.Statement[] };
+  const jobs: Job[] = [];
+
+  program.traverse({
+    CallExpression(p) {
+      if (!t.isIdentifier(p.node.callee, { name: 'eval' })) return;
+      if (p.scope.hasBinding('eval', { noGlobals: true })) return;
+      if (p.node.arguments.length !== 1) return;
+      const arg = p.node.arguments[0];
+      if (t.isStringLiteral(arg) || !t.isExpression(arg)) return; // literals are B03d's
+
+      // The eval must be the whole of a statement, so its (discarded) completion
+      // value plays no part and the payload can stand in as sibling statements.
+      const stmt = p.parentPath;
+      if (!stmt.isExpressionStatement() || stmt.node.expression !== p.node) return;
+      // It must sit directly in the program body or a function's block body:
+      // that is the variable environment a sloppy direct eval would hoist into.
+      const holder = stmt.parentPath;
+      if (!holder) return;
+      const ownerFn = holder.isBlockStatement() ? holder.parentPath : null;
+      if (!holder.isProgram() && !(holder.isBlockStatement() && ownerFn?.isFunction())) return;
+      if (inStrictCode(p)) return;
+
+      // The argument must be a closed, pure slice: free names are safe globals
+      // only, with no `this`, no reads/writes/mutations of any outer binding,
+      // and no dynamic scope of its own.
+      const argPath = p.get('arguments.0') as NodePath;
+      if (hasDynamicScope(arg)) {
+        impure++;
+        return;
+      }
+      const refs = freeReferences(argPath);
+      if (refs.usesThis || refs.reads.size || refs.writes.size || refs.mutates.size) {
+        impure++;
+        return;
+      }
+      if ([...refs.globals].some((g) => !SLICE_SAFE_GLOBALS.has(g))) {
+        impure++;
+        return;
+      }
+
+      // Another `eval`/`with` sharing this scope could observe the newly
+      // materialised bindings differently, and makes the scope tables the
+      // name-clash check relies on unreliable. Refuse when one is present.
+      const scopeNode = holder.isProgram() ? holder.node : (ownerFn as NodePath).node;
+      let otherDynamic = false;
+      t.traverseFast(scopeNode, (nd) => {
+        if (nd === p.node) return;
+        if (t.isWithStatement(nd)) otherDynamic = true;
+        if (t.isCallExpression(nd) && t.isIdentifier(nd.callee, { name: 'eval' })) otherDynamic = true;
+      });
+      if (otherDynamic) return;
+
+      // Evaluate only this closed slice. No eval/Function is reachable, so the
+      // payload cannot run; we read back the string it builds.
+      let value: unknown;
+      try {
+        const ctx = createSandbox(buildDecoderSandbox());
+        // A decoder that reads a clock or RNG would be frozen to one sample,
+        // so make either throw: a nondeterministic slice then bails here.
+        ctx.run('Math.random = function () { throw new Error("nondeterministic"); };');
+        value = ctx.run(`(${generate(arg).code});`, 5000);
+        ctx.dispose();
+      } catch {
+        impure++;
+        return;
+      }
+      if (typeof value !== 'string') {
+        notString++;
+        return;
+      }
+      noteSourceText(value);
+
+      let parsed: t.Program;
+      try {
+        parsed = parser.parse(value, { sourceType: 'script', allowReturnOutsideFunction: true }).program;
+      } catch {
+        return; // not a complete program: leave the eval for the comment fallback
+      }
+      if (parsed.body.length === 0) return;
+      // A sloppy direct eval does not leak lexical declarations or a strict
+      // directive into the caller, so inlining those would change scope/mode.
+      if (parsed.directives.length) return;
+      if (
+        parsed.body.some(
+          (s) =>
+            (t.isVariableDeclaration(s) && s.kind !== 'var') ||
+            t.isClassDeclaration(s) ||
+            t.isImportDeclaration(s) ||
+            t.isExportNamedDeclaration(s) ||
+            t.isExportDefaultDeclaration(s) ||
+            t.isExportAllDeclaration(s)
+        )
+      )
+        return;
+      // No name the payload hoists may already be bound where the eval sits:
+      // that would change which declaration wins.
+      const declared = topLevelDeclaredNames(parsed);
+      for (const name of declared) if (stmt.scope.hasBinding(name, { noGlobals: true })) return;
+
+      jobs.push({ stmt: stmt as NodePath<t.ExpressionStatement>, body: parsed.body });
+      p.skip();
+    },
+  });
+
+  for (const job of jobs) {
+    try {
+      job.stmt.replaceWithMultiple(job.body);
+      n++;
+    } catch {
+      /* detached by an earlier replacement */
+    }
+  }
+
+  log.pass(
+    'b03g',
+    'eval-closed-call',
+    n,
+    'inlined',
+    [impure ? `${impure} impure` : null, notString ? `${notString} non-string` : null]
+      .filter(Boolean)
+      .join(', ') || undefined
+  );
+  return n;
+}
+
+// ── B03h: JSFuck — Function-constructor indirect eval of a closed expression ──
+
+/**
+ * JSFuck encodes a program as one enormous expression built only from the six
+ * characters `[]()!+`, with no identifiers at all. With `eval` enabled it runs
+ * the payload through the Function constructor reached as a property, e.g.
+ *
+ *   [][ "filter" ][ "constructor" ]( <expression that builds the source> )()
+ *
+ * The inner call is `Function(src)`; the trailing `()` runs the built function.
+ * Both the constructor reference and the source-building argument are closed and
+ * pure — their only inputs are literal coercions — so each can be evaluated in
+ * the sandbox without running anything: getting the Function *reference* is a
+ * property read, and building the source is string arithmetic. The payload
+ * itself is never invoked; the sandbox exposes no usable call of it.
+ *
+ * Recovery mirrors `function-constructor` exactly: the inner `Function(src)` is
+ * replaced by the function expression `function () { <src> }`, so the outer `()`
+ * turns the whole thing into `(function () { <src> })()`. That IIFE reproduces
+ * the Function constructor's semantics (a fresh sloppy function scope, `this`
+ * bound to the global object, top-level `var`/function kept local to the call)
+ * under the same conditions `function-constructor` requires: the caller must be
+ * sloppy, no free name of the body may resolve to a binding at the call site,
+ * and nothing outside may read a name the body declares at top level.
+ */
+/**
+ * Is `node` built only from JSFuck's six characters `[]()!+`? That is exactly
+ * the node types those characters can produce — array literals, computed member
+ * access, calls, and unary/binary `!`/`+` — and nothing else: no identifier, no
+ * string or numeric literal, no function body. It is what separates a genuine
+ * JSFuck blob from an ordinary `Function(string)()` the other passes handle.
+ */
+function isJsfuckOnly(node: t.Node): boolean {
+  let ok = true;
+  walk(node, (n) => {
+    if (!ok) return false;
+    switch (n.type) {
+      case 'CallExpression':
+      case 'MemberExpression':
+      case 'UnaryExpression':
+      case 'BinaryExpression':
+        return; // descend into children
+      case 'ArrayExpression':
+        // JSFuck arrays are empty or hold further JSFuck expressions — never
+        // holes or spreads.
+        if ((n as t.ArrayExpression).elements.some((e) => e === null || t.isSpreadElement(e))) ok = false;
+        return;
+      default:
+        ok = false;
+        return false;
+    }
+  });
+  return ok;
+}
+
+function passJsfuckUnwrap(ast: t.File, log: Logger): number {
+  let n = 0;
+  let impure = 0;
+  let notFunction = 0;
+  const program = freshProgram(ast);
+  const programStrict =
+    program.node.sourceType === 'module' ||
+    program.node.directives.some((d) => d.value.value === 'use strict');
+  const inStrictCode = (p: NodePath): boolean => {
+    if (programStrict) return true;
+    for (let cur: NodePath | null = p; cur; cur = cur.parentPath) {
+      const node = cur.node;
+      if (t.isFunction(node) && t.isBlockStatement(node.body))
+        if (node.body.directives.some((d) => d.value.value === 'use strict')) return true;
+      if (t.isClassDeclaration(node) || t.isClassExpression(node)) return true;
+    }
+    return false;
+  };
+
+  const jobs: Array<{ innerPath: NodePath<t.CallExpression>; fn: t.FunctionExpression }> = [];
+
+  program.traverse({
+    CallExpression(outer) {
+      // outer: `<innerCall>()` — the trailing call that would run the payload.
+      if (outer.node.arguments.length !== 0) return;
+      const inner = outer.get('callee');
+      if (!inner.isCallExpression() || inner.node.arguments.length !== 1) return;
+      const ctor = inner.node.callee;
+      const argNode = inner.node.arguments[0];
+      // JSFuck has no identifiers: the construct must be a computed member chain
+      // over an array, never a plain `Function(...)` (that is B03c's job).
+      if (!t.isExpression(ctor) || t.isIdentifier(ctor)) return;
+      if (!t.isExpression(argNode)) return;
+      if (inStrictCode(outer)) return;
+      // The construct must be *only* `[]()!+` — JSFuck's whole alphabet — so the
+      // pass stays off other `Function(string)()` shapes (e.g. an obfuscator's
+      // `…constructor("return this")()` global-object probe, which other passes
+      // already reduce). Any string/numeric literal, identifier, or function
+      // body means it is something else; leave it for its own pass.
+      if (!isJsfuckOnly(inner.node)) return;
+
+      // The inner call (constructor reference + source argument) must be a
+      // closed, pure slice: safe globals only, no `this`, no outer bindings.
+      if (hasDynamicScope(inner.node)) {
+        impure++;
+        return;
+      }
+      const refs = freeReferences(inner);
+      if (refs.usesThis || refs.reads.size || refs.writes.size || refs.mutates.size) {
+        impure++;
+        return;
+      }
+      if ([...refs.globals].some((g) => !SLICE_SAFE_GLOBALS.has(g))) {
+        impure++;
+        return;
+      }
+
+      // Confirm the callee really is the Function constructor and read back the
+      // source it is given — without ever evaluating the outer `()`.
+      let src: unknown;
+      try {
+        const ctx = createSandbox(buildDecoderSandbox());
+        ctx.run('Math.random = function () { throw new Error("nondeterministic"); };');
+        const isFn = ctx.run(`(${generate(ctor).code}) === Function`);
+        if (isFn !== true) {
+          ctx.dispose();
+          notFunction++;
+          return;
+        }
+        src = ctx.run(`(${generate(argNode).code});`, 5000);
+        ctx.dispose();
+      } catch {
+        impure++;
+        return;
+      }
+      if (typeof src !== 'string') {
+        notFunction++;
+        return;
+      }
+      noteSourceText(src);
+
+      let body: t.Program;
+      try {
+        body = parser.parse(src, { sourceType: 'script', allowReturnOutsideFunction: true }).program;
+      } catch {
+        return;
+      }
+
+      // No free name of the body may bind at the call site (the created function
+      // is compiled in global scope and sees no local), and nothing outside may
+      // read a top-level name it declares.
+      const free = freeNamesOfProgram(body, []);
+      if ([...free].some((name) => outer.scope.hasBinding(name, { noGlobals: true }))) {
+        impure++;
+        return;
+      }
+      const declared = topLevelDeclaredNames(body);
+      if (declared.size > 0) {
+        let read = false;
+        program.traverse({
+          Identifier(ip) {
+            if (read || !declared.has(ip.node.name) || !ip.isReferencedIdentifier()) return;
+            if (!pathWithin(ip, outer.node)) read = true;
+          },
+        });
+        if (read) {
+          impure++;
+          return;
+        }
+      }
+
+      jobs.push({
+        innerPath: inner as NodePath<t.CallExpression>,
+        fn: t.functionExpression(null, [], t.blockStatement(body.body, body.directives)),
+      });
+      outer.skip();
+    },
+  });
+
+  for (const { innerPath, fn } of jobs) {
+    try {
+      innerPath.replaceWith(fn);
+      n++;
+    } catch {
+      /* detached */
+    }
+  }
+
+  log.pass(
+    'b03h',
+    'jsfuck-unwrap',
+    n,
+    'unwrapped',
+    [impure ? `${impure} not closed` : null, notFunction ? `${notFunction} not Function(string)` : null]
+      .filter(Boolean)
+      .join(', ') || undefined
   );
   return n;
 }
@@ -12722,6 +13093,8 @@ const PASS_FN_MAP: Record<string, PassFn> = {
   'string-escape-norm': passStringEscapeNorm,
   'function-constructor': passFunctionConstructor, // B03c — Function("…","body") → IIFE
   'eval-literal': passEvalLiteral, // B03d
+  'eval-closed-call': passEvalClosedCall, // B03g — eval(<closed pure decoder>(…)) e.g. Dean Edwards packer
+  'jsfuck-unwrap': passJsfuckUnwrap, // B03h — JSFuck's Function-constructor eval of a closed expression
   'rgf': passRgf, // B03e — reduced-global-function (eval-embedded functions)
   'rgf-thunk': passRgfThunk, // B03f — collapse RGF forwarding thunks into their real fn
   'cff-recover': passCffRecover, // B13d — js-confuser control-flow flattening (see ./cff) — eval("<expr>") → <expr>
@@ -12783,6 +13156,8 @@ const PASS_FN_MAP: Record<string, PassFn> = {
 export const PASS_ORDER: readonly string[] = [
   'function-constructor', // B03c — expose a program hidden in a Function() string
   'eval-literal', // B03d — drop literal direct eval so binding passes stay enabled
+  'eval-closed-call', // B03g — unwrap eval(<closed pure decoder>(…)): the Dean Edwards packer and kin
+  'jsfuck-unwrap', // B03h — unwrap JSFuck's Function-constructor eval of a closed expression
   'rgf', // B03e — recover functions embedded as eval source behind a guard
   'rgf-thunk', // B03f — collapse the forwarding thunks RGF leaves behind
   'cff-recover', // B13d — simulate js-confuser dispatchers, rebuild if/while, lower scope frames
@@ -12820,6 +13195,8 @@ export const PASS_ORDER: readonly string[] = [
   'bitwise-literals', // B04b — `x >>> 6.74` → `x >>> 6`
   'closure-string-decoding', // B05a again — picks up any proxy-wrapped call sites
   'eval-literal', // B03d again — arguments that only became literal after decoding
+  'eval-closed-call', // B03g again — decoder calls that only became closed after string inlining
+  'jsfuck-unwrap', // B03h again — nested JSFuck exposed only after an outer layer resolved
   'member-expression-simplification',
   'object-tables', // B07c again — keys are static now that strings are decoded
   'literal-arrays', // B07d again — indices that only became literal after folding

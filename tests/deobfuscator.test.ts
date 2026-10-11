@@ -791,6 +791,85 @@ describe('structural primitives', () => {
     expect(await execute(kept.deobfuscatedCode)).toEqual(['2 function']);
   });
 
+  it("unwraps a Dean Edwards packer by evaluating only its closed decoder", async () => {
+    // The packer ships the real program as `eval(<decoder>(…literals…))`. The
+    // decoder is a closed pure string transform, so evaluating that slice alone
+    // recovers the source; the payload itself is never run.
+    const source = `eval(function(p,a,c,k,e,d){e=function(c){return c.toString(36)};if(!''.replace(/^/,String)){while(c--)d[e(c)]=k[c]||e(c);k=[function(e){return d[e]}];e=function(){return'\\\\w+'};c=1};while(c--)if(k[c])p=p.replace(new RegExp('\\\\b'+e(c)+'\\\\b','g'),k[c]);return p}("0 1(2){3 4='5 '+2+'!';6.7(4)}1('8 9')",62,10,"function|greet|name|var|output|Hi|console|log|Dear|Reader".split("|"),0,{}));`;
+    expect(await execute(source)).toEqual(['Hi Dear Reader!']);
+    const result = await recover(source);
+    expect(await execute(result.deobfuscatedCode)).toEqual(['Hi Dear Reader!']);
+    // The eval, the decoder and its blob are gone; the source stands in place.
+    expect(result.deobfuscatedCode).not.toMatch(/eval/);
+    expect(result.deobfuscatedCode).toMatch(/function greet\(name\)/);
+    expect(result.deobfuscatedCode).toMatch(/greet\('Dear Reader'\)/);
+    expect(passCounts(result, 'eval-closed-call')).toContain(1);
+  });
+
+  it('refuses to unwrap an eval whose decoder slice is not closed, pure, or discarded', async () => {
+    // The guarantee is that only a closed, pure, value-discarded eval is
+    // inlined; each of these must come back behaving the same, eval intact.
+    const mustNotFire = [
+      // completion value is used, so sibling statements cannot stand in
+      `var r = eval((function () { return "1 + 1"; })()); console.log(r);`,
+      // the decoder reads an outer binding — not a closed slice
+      `var S = "unreachable"; eval((function () { return S; })()); console.log("ok");`,
+      // a direct eval in strict code does not leak var/function to the caller
+      `"use strict"; eval((function () { return "var leaked = 7;"; })()); console.log(typeof leaked);`,
+      // the payload would redeclare a name already bound at the call site
+      `function greet() { console.log("real"); }
+       eval((function () { return "function greet(){ console.log('fake'); } greet();"; })());
+       greet();`,
+      // the payload's top-level let would leak out of the eval if spliced
+      `function f() { var r = eval((function () { return "let x = 5; x"; })()); console.log(r, typeof x); } f();`,
+    ];
+    for (const source of mustNotFire) {
+      const before = await execute(source);
+      const result = await recover(source);
+      expect(await execute(result.deobfuscatedCode)).toEqual(before);
+      expect(passCounts(result, 'eval-closed-call').every((c) => c === 0)).toBe(true);
+    }
+  });
+
+  it('unwraps JSFuck by evaluating only its closed source-building slice', async () => {
+    // JSFuck ships the program as `Function(<[]()!+ source expr>)()`. The pass
+    // confirms the callee is the Function constructor and reads back the source
+    // it builds, without ever running the payload, then rebuilds it as an IIFE.
+    const source = readFileSync(new URL('./obfuscated/jsfuck.js', import.meta.url), 'utf8');
+    expect(await execute(source)).toEqual(['JSFuck 42']);
+    const result = await recover(source);
+    expect(await execute(result.deobfuscatedCode)).toEqual(['JSFuck 42']);
+    // the `[]()!+` blob is gone and the real call is back
+    expect(result.deobfuscatedCode).not.toMatch(/\]\[\(/);
+    expect(result.deobfuscatedCode).toMatch(/console\.log/);
+    expect(passCounts(result, 'jsfuck-unwrap')).toContain(1);
+  });
+
+  it('refuses a Function-constructor call it cannot prove is a closed string decoder', async () => {
+    // Only `Function(<closed pure string>)()` over a computed constructor is
+    // unwrapped; each of these keeps its behaviour and its call untouched.
+    const mustNotFire = [
+      // the constructor reference reads an outer binding: not a closed slice
+      `var F = [][ "fill" ][ "constructor" ];
+       F("return 1")();
+       console.log("ok");`,
+      // the argument reads an outer binding (a parameter), so the slice that
+      // builds the source is not closed and cannot be evaluated
+      `function run(body) { [][ "fill" ][ "constructor" ](body)(); }
+       run("globalThis.leaked = 1");
+       console.log(typeof globalThis.leaked);`,
+      // the callee is not the Function constructor (plain array method call)
+      `[1, 2, 3][ "map" ](function (x) { return x; });
+       console.log("done");`,
+    ];
+    for (const source of mustNotFire) {
+      const before = await execute(source);
+      const result = await recover(source);
+      expect(await execute(result.deobfuscatedCode)).toEqual(before);
+      expect(passCounts(result, 'jsfuck-unwrap').every((c) => c === 0)).toBe(true);
+    }
+  });
+
   it('bounds a table member function by its call sites and restores its moved declaration', async () => {
     // js-confuser's dispatcher table: every member is only ever called with
     // no arguments, so the guarded parameter is a moved local.

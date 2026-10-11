@@ -31,7 +31,7 @@ it('flags every catalogued pass exactly as the default run treats it', () => {
 });
 
 it('exposes every structural primitive with the engine default', () => {
-  expect(STRUCTURAL_PASSES).toHaveLength(27);
+  expect(STRUCTURAL_PASSES).toHaveLength(29);
   for (const pass of STRUCTURAL_PASSES) {
     expect(DEFAULT_ENABLED_PASSES).toContain(pass.name);
     expect(pass.enabled_by_default).toBe(true);
@@ -40,6 +40,6 @@ it('exposes every structural primitive with the engine default', () => {
 
 it('adds the structural passes to a catalog that lacks them', () => {
   const passes = withStructuralPasses([{ name: 'string-escape-norm' }]);
-  expect(passes).toHaveLength(28);
+  expect(passes).toHaveLength(30);
   expect(passes.filter((p) => p.name === 'string-escape-norm')).toHaveLength(1);
 });

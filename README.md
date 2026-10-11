@@ -137,13 +137,21 @@ Everything else that is common: `eval`/`Function` wrappers, proxy functions, opa
 predicates, bracket-notation members, hex/unicode/`fromCharCode`/`atob` strings,
 constant folding, sequence expressions, dead stores and temporaries.
 
+**Dean Edwards' packer** (`eval(function(p,a,c,k,e,d){…}('…',N,M,'…'.split('|'),0,{}))`)
+and **JSFuck** (`[][…]["constructor"](<[]()!+ source>)()`) are recovered back to the
+original program. Both ship the real source behind a decoder that is a closed, pure
+string transform, so the engine evaluates *only that slice* — in a sandbox with no
+reachable `eval` or `Function` — reads back the source it builds, and splices it in.
+The payload is never run; a decoder that tried to execute its own result throws
+instead. The rewrite is taken per call only where it is provably behaviour-preserving
+(a sloppy caller, no name the payload introduces clashing or escaping its scope).
+
 **Not (yet) recovered**, though the output still behaves like the input: bytecode-VM
-obfuscators (Obscura, MeowShield's JSVMP levels), JSFuck, and Dean Edwards'
-`eval(function(p,a,c,k,e,d){…})` packer. When the engine cannot settle a self-check
-that reads the program's own text, it keeps the output on one line rather than risk
-changing what the check sees. One known exception: MeowShield's self-defending VM level
-verifies its own text from inside the bytecode, where the engine cannot see the check,
-and rejects any reprint at all.
+obfuscators (Obscura, MeowShield's JSVMP levels). When the engine cannot settle a
+self-check that reads the program's own text, it keeps the output on one line rather
+than risk changing what the check sees. One known exception: MeowShield's self-defending
+VM level verifies its own text from inside the bytecode, where the engine cannot see the
+check, and rejects any reprint at all.
 
 ## How it works — and what "sound" means here
 

@@ -37,6 +37,10 @@ const DESCRIPTIONS: Record<string, string> = {
     'Strip a high-frequency junk token padded into identifiers and strings (frequency analysis on the raw text; opt-in — it can damage ordinary code).',
   'function-constructor': 'Write out Function("args", "body") calls statically, without executing them.',
   'eval-literal': 'Replace direct eval of a literal expression with the expression.',
+  'eval-closed-call':
+    'Unwrap a direct eval whose argument is a proven-pure, closed decoder call (such as the Dean Edwards packer) by evaluating only that closed slice in the sandbox and splicing in the recovered source.',
+  'jsfuck-unwrap':
+    "Unwrap JSFuck's Function-constructor eval of a closed `[]()!+` expression: confirm the callee is the Function constructor and read back the source it builds, without ever running the payload, then rebuild it as an IIFE.",
   'rgf': 'Recover a function embedded as eval source behind a provably-true guard (js-confuser RGF).',
   'rgf-thunk': 'Collapse the forwarding thunk RGF leaves into the real function body.',
   'cff-recover': 'Rebuild code flattened into a js-confuser state-machine dispatcher, including its scope frames.',
@@ -105,6 +109,8 @@ const OPT_IN = new Set(['junk-token-removal', 'closure-string-decoding', 'rename
 const STAGE_B: Array<[string, string, number]> = [
   ['function-constructor', 'b03c', 1],
   ['eval-literal', 'b03d', 2],
+  ['eval-closed-call', 'b03g', 2],
+  ['jsfuck-unwrap', 'b03h', 2],
   ['rgf', 'b03e', 1],
   ['rgf-thunk', 'b03f', 1],
   ['cff-recover', 'b13d', 1],
@@ -210,7 +216,7 @@ const BASE_NAMES = [
   'deduplicate-var-decls', 'rename-mangled', 'vm-eval-hook',
 ];
 const STRUCTURAL_NAMES = [
-  'function-constructor', 'eval-literal', 'rgf', 'rgf-thunk', 'cff-recover', 'statement-normalize', 'param-locals', 'moved-declarations',
+  'function-constructor', 'eval-literal', 'eval-closed-call', 'jsfuck-unwrap', 'rgf', 'rgf-thunk', 'cff-recover', 'statement-normalize', 'param-locals', 'moved-declarations',
   'concealed-globals', 'locks', 'concealed-strings', 'dispatchers', 'flat-functions', 'masked-variables', 'noop-calls',
   'binding-propagation', 'object-tables', 'literal-arrays', 'closed-function-eval', 'bitwise-literals', 'switch-dispatcher',
   'conditional-statements', 'dead-stores', 'single-use-temps', 'iife-flatten', 'declaration-tidy', 'confuser-names',
